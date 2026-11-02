@@ -1,0 +1,153 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --felt: #155d3e;
+  --felt-dark: #0d3d29;
+  --gold: #d4af37;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--felt-dark);
+  color: #ffffff;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.app-root {
+  height: 100%;
+  min-height: 100dvh;
+}
+
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+.felt-bg {
+  background-color: var(--felt);
+  background-image: radial-gradient(
+      circle at 20% 15%,
+      rgba(255, 255, 255, 0.08),
+      transparent 45%
+    ),
+    radial-gradient(circle at 80% 85%, rgba(0, 0, 0, 0.28), transparent 55%),
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.018) 0px,
+      rgba(255, 255, 255, 0.018) 2px,
+      transparent 2px,
+      transparent 6px
+    );
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  transition: transform 0.12s ease, filter 0.15s ease, background 0.15s ease;
+  border: 1px solid transparent;
+  user-select: none;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  filter: grayscale(0.25);
+}
+
+.btn-primary {
+  background: linear-gradient(180deg, #2ba36d, #1a6b46);
+  color: #fff;
+  box-shadow: 0 4px 0 #0f452c, 0 6px 14px rgba(0, 0, 0, 0.28);
+}
+
+.btn-primary:active:not(:disabled) {
+  box-shadow: 0 2px 0 #0f452c, 0 3px 8px rgba(0, 0, 0, 0.28);
+  transform: translateY(2px);
+}
+
+.btn-gold {
+  background: linear-gradient(180deg, #e6c65a, #c39a1f);
+  color: #3a2a00;
+  box-shadow: 0 4px 0 #8a6c0d, 0 6px 14px rgba(0, 0, 0, 0.3);
+}
+
+.btn-gold:active:not(:disabled) {
+  box-shadow: 0 2px 0 #8a6c0d;
+  transform: translateY(2px);
+}
+
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.24);
+  backdrop-filter: blur(6px);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.btn-danger {
+  background: linear-gradient(180deg, #f05b5b, #c62828);
+  color: #fff;
+  box-shadow: 0 4px 0 #8c1414;
+}
+
+.glass {
+  background: rgba(8, 40, 27, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
+.gold-text {
+  background: linear-gradient(180deg, #fff3c4, #e6c65a 45%, #b8860b);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
