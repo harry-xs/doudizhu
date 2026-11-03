@@ -467,13 +467,20 @@ export const useGameStore = defineStore("game", () => {
     }
   }
 
-  function toggleSelect(cardId: string): void {
-    if (!isHumanTurn.value || humanAuto.value) return;
+  function selectCard(cardId: string, selected: boolean, silent = false): void {
+    if (phase.value !== "play" || humanAuto.value) return;
     const exists = selectedIds.value.includes(cardId);
-    selectedIds.value = exists
-      ? selectedIds.value.filter((id) => id !== cardId)
-      : [...selectedIds.value, cardId];
-    sound("select");
+    if (exists === selected) return;
+    selectedIds.value = selected
+      ? [...selectedIds.value, cardId]
+      : selectedIds.value.filter((id) => id !== cardId);
+    if (!silent) sound("select");
+  }
+
+  function toggleSelect(cardId: string): void {
+    if (phase.value !== "play" || humanAuto.value) return;
+    const exists = selectedIds.value.includes(cardId);
+    selectCard(cardId, !exists);
   }
 
   function clearSelection(): void {
@@ -538,6 +545,7 @@ export const useGameStore = defineStore("game", () => {
     humanPass,
     humanHint,
     passTurn,
+    selectCard,
     toggleSelect,
     clearSelection,
     toggleTrustee,

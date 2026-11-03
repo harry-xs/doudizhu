@@ -130,7 +130,7 @@
       </div>
 
       <div ref="handEl" class="hand-wrap">
-        <div class="hand">
+        <div class="hand" @contextmenu.prevent>
           <button
             v-for="(card, i) in game.human.hand"
             :key="game.round + '-' + card.id"
@@ -141,7 +141,9 @@
               'hand-card--static': !canSelect,
             }"
             :style="handCardStyle(i)"
-            @click="game.toggleSelect(card.id)"
+            :data-card-id="card.id"
+            @pointerdown="onCardPointerDown($event, card.id)"
+            @click="onCardClick(card.id, $event)"
           >
             <PlayingCard :card="card" :size="cardSize" :selected="isSelected(card.id)" />
           </button>
@@ -266,7 +268,9 @@ const isCallTurn = computed(
   () => game.phase === "call" && game.turnUid === game.human.uid,
 );
 
-const canSelect = computed(() => game.isHumanTurn && !game.humanAuto);
+const canSelect = computed(
+  () => game.phase === "play" && !game.humanAuto,
+);
 
 const actionRows = computed(() => {
   const rows: {
@@ -368,6 +372,55 @@ function handCardStyle(index: number) {
   };
 }
 
+type DragMode = "select" | "deselect";
+
+let dragState: { mode: DragMode } | null = null;
+let suppressClickUntil = 0;
+
+function cardIdAtPoint(x: number, y: number): string | null {
+  const el = document.elementFromPoint(x, y) as HTMLElement | null;
+  const cardEl = el?.closest<HTMLElement>(".hand-card");
+  return cardEl?.dataset.cardId ?? null;
+}
+
+function onCardPointerDown(event: PointerEvent, cardId: string): void {
+  if (!canSelect.value) return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  event.preventDefault();
+  suppressClickUntil = Date.now() + 400;
+
+  const mode: DragMode = isSelected(cardId) ? "deselect" : "select";
+  dragState = { mode };
+  game.selectCard(cardId, mode === "select");
+
+  window.addEventListener("pointermove", onWindowPointerMove);
+  window.addEventListener("pointerup", endDrag);
+  window.addEventListener("pointercancel", endDrag);
+}
+
+function onWindowPointerMove(event: PointerEvent): void {
+  if (!dragState) return;
+  const id = cardIdAtPoint(event.clientX, event.clientY);
+  if (!id) return;
+  const shouldSelect = dragState.mode === "select";
+  if (isSelected(id) !== shouldSelect) {
+    game.selectCard(id, shouldSelect, true);
+  }
+}
+
+function endDrag(): void {
+  dragState = null;
+  window.removeEventListener("pointermove", onWindowPointerMove);
+  window.removeEventListener("pointerup", endDrag);
+  window.removeEventListener("pointercancel", endDrag);
+}
+
+function onCardClick(cardId: string, event: MouseEvent): void {
+  // 指针按下时已经完成选牌；只保留键盘/读屏触发的 click
+  if (event.detail > 0 && Date.now() < suppressClickUntil) return;
+  game.toggleSelect(cardId);
+}
+
 const selectionState = computed(() => {
   const cards = game.selectedCards;
   if (cards.length === 0) return { text: "", bad: false };
@@ -385,7 +438,7 @@ const selectionState = computed(() => {
 });
 
 const canPlay = computed(() => {
-  if (!canSelect.value) return false;
+  if (!game.isHumanTurn || !canSelect.value) return false;
   const cards = game.selectedCards;
   if (cards.length === 0) return false;
   const info = parsePlay(cards);
@@ -437,6 +490,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   observer?.disconnect();
   observer = null;
+  endDrag();
   if (shakeTimer) clearTimeout(shakeTimer);
   shakeTimer = null;
   game.resetToIdle();
@@ -1012,6 +1066,9 @@ onBeforeUnmount(() => {
   align-items: flex-end;
   min-height: 58px;
   padding-bottom: 2px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .hand-card {
@@ -1021,7 +1078,9 @@ onBeforeUnmount(() => {
   border: none;
   background: transparent;
   transition: transform 0.14s ease, filter 0.14s ease;
-  touch-action: manipulation;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
   animation: deal-in 0.3s ease backwards;
 }
 
