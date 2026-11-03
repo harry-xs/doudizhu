@@ -1,7 +1,7 @@
 import type { Card, Suit } from "../src/game/types";
 import { parsePlay, canBeat } from "../src/game/rules";
 import { dealCards, sortCards } from "../src/game/deck";
-import { chooseMove, chooseCall } from "../src/game/moves";
+import { chooseMove, chooseCall } from "../src/game/ai";
 
 let passed = 0;
 const failures: string[] = [];
@@ -82,7 +82,7 @@ for (let g = 0; g < 600; g++) {
   const players = dealt.hands.map((hand, i) => ({
     hand: sortCards(hand),
     isLandlord: i === 0,
-    uid: i,
+    uid: `p${i}`,
   }));
   const bottom = dealt.bottom;
   players[0].hand = sortCards([...players[0].hand, ...bottom]);
@@ -95,13 +95,16 @@ for (let g = 0; g < 600; g++) {
 
   for (let step = 0; step < 400 && winner === null; step++) {
     const player = players[turn];
+    const order = players.map((p) => ({
+      uid: p.uid,
+      isLandlord: p.isLandlord,
+      handCount: p.hand.length,
+    }));
     const move = chooseMove(player.hand, last, {
-      isFarmer: !player.isLandlord,
-      lastPlayerIsTeammate:
-        lastOwner !== null &&
-        !lastOwner.isLandlord &&
-        !player.isLandlord,
-      lastPlayerCardCount: lastOwner?.hand.length ?? 0,
+      self: order[turn],
+      players: order,
+      lastPlayerUid: lastOwner?.uid ?? null,
+      landlordUid: "p0",
     });
 
     if (move) {

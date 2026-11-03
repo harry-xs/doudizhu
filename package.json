@@ -8,7 +8,8 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
-    "test:engine": "tsx scripts/engine-sim.ts"
+    "test:engine": "tsx scripts/engine-sim.ts",
+    "test:ai": "tsx scripts/ai-bench.ts 2000"
   },
   "dependencies": {
     "pinia": "^2.2.6",

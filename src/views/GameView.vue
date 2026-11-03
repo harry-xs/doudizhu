@@ -4,16 +4,28 @@
       <button type="button" class="icon-btn" aria-label="返回首页" @click="goHome">
         ←
       </button>
-      <div class="game__center">
-        <span class="round-pill">第 {{ game.round }} 局</span>
-        <span class="multi-pill">倍数 ×{{ game.multiple }}</span>
+      <div class="scoreboard">
+        <div class="scoreboard__item">
+          <span class="scoreboard__label">局数</span>
+          <strong class="scoreboard__value">{{ game.round }}</strong>
+        </div>
+        <span class="scoreboard__divider"></span>
+        <div class="scoreboard__item">
+          <span class="scoreboard__label">倍数</span>
+          <strong class="scoreboard__value scoreboard__value--gold">×{{ game.multiple }}</strong>
+        </div>
       </div>
       <button type="button" class="icon-btn icon-btn--text" @click="settingsOpen = true">
         设置
       </button>
     </header>
 
-    <main class="table">
+    <main class="table" :class="{ 'table--shake': shaking }">
+      <div class="table-rim" aria-hidden="true"></div>
+      <div class="table-mark" aria-hidden="true">
+        <span class="table-mark__ring"></span>
+        <span class="table-mark__glyph">斗</span>
+      </div>
       <PlayerSeat
         v-if="leftPlayer"
         class="seat-left"
@@ -34,8 +46,18 @@
       <div class="bottom-cards">
         <span class="bottom-cards__label">底牌</span>
         <div class="bottom-cards__list">
-          <div v-for="(card, i) in game.bottomCards" :key="card.id" class="bottom-card" :class="`bottom-card--${i}`">
-            <PlayingCard v-if="game.bottomRevealed" :card="card" size="xs" />
+          <div
+            v-for="(card, i) in game.bottomCards"
+            :key="card.id"
+            class="bottom-card"
+            :class="`bottom-card--${i}`"
+          >
+            <PlayingCard
+              v-if="game.bottomRevealed"
+              :card="card"
+              size="xs"
+              class="bottom-card__face"
+            />
             <CardBack v-else size="xs" />
           </div>
         </div>
@@ -73,7 +95,15 @@
               />
             </div>
           </div>
-          <span v-else class="action-zone__text">{{ row.status }}</span>
+          <span
+            v-else
+            class="action-zone__text"
+            :class="{
+              'action-zone__text--pass': row.action && row.action.kind === 'pass',
+            }"
+          >
+            {{ row.status }}
+          </span>
         </div>
       </div>
     </main>
@@ -84,6 +114,7 @@
         <span v-if="game.human.isLandlord" class="tag tag--lord">地主</span>
         <span v-else-if="game.landlordConfirmed" class="tag tag--farmer">农民</span>
         <span v-if="game.human.isTrustee" class="tag tag--trustee">托管中</span>
+        <span class="human-meta__count">{{ game.human.hand.length }} 张</span>
         <span class="human-meta__hint">{{ game.actionHint }}</span>
       </div>
 
@@ -185,7 +216,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useGameStore } from "@/stores/game";
 import { canBeat, parsePlay } from "@/game/rules";
@@ -202,9 +233,27 @@ const router = useRouter();
 const game = useGameStore();
 
 const settingsOpen = ref(false);
+const shaking = ref(false);
 const handEl = ref<HTMLElement | null>(null);
 const handWidth = ref(360);
 let observer: ResizeObserver | null = null;
+let shakeTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => game.multiple,
+  (next, previous) => {
+    if (next <= previous) return;
+    shaking.value = false;
+    if (shakeTimer) clearTimeout(shakeTimer);
+    requestAnimationFrame(() => {
+      shaking.value = true;
+    });
+    shakeTimer = setTimeout(() => {
+      shaking.value = false;
+      shakeTimer = null;
+    }, 520);
+  },
+);
 
 const leftPlayer = computed(
   () => game.players.find((p) => p.uid !== game.human.uid && p.uid === "p2") ?? null,
@@ -388,6 +437,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   observer?.disconnect();
   observer = null;
+  if (shakeTimer) clearTimeout(shakeTimer);
+  shakeTimer = null;
   game.resetToIdle();
 });
 </script>
@@ -401,6 +452,8 @@ onBeforeUnmount(() => {
 }
 
 .game__header {
+  position: relative;
+  z-index: 5;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -409,25 +462,59 @@ onBeforeUnmount(() => {
   padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
 }
 
-.game__center {
+.scoreboard {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  padding: 5px 15px;
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.32),
+    rgba(0, 0, 0, 0.16)
+  );
+  border: 1px solid rgba(212, 175, 55, 0.26);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 4px 12px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(6px);
 }
 
-.round-pill,
-.multi-pill {
-  font-size: 12px;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.24);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  white-space: nowrap;
+.scoreboard__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 38px;
 }
 
-.multi-pill {
+.scoreboard__label {
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.scoreboard__value {
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.scoreboard__value--gold {
   color: #ffd75e;
+  text-shadow: 0 0 12px rgba(255, 215, 94, 0.35);
+}
+
+.scoreboard__divider {
+  width: 1px;
+  height: 24px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(212, 175, 55, 0.5),
+    transparent
+  );
 }
 
 .icon-btn {
@@ -451,6 +538,115 @@ onBeforeUnmount(() => {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  border-radius: 26px;
+  background: radial-gradient(
+      ellipse at 50% 30%,
+      rgba(255, 255, 255, 0.06),
+      transparent 58%
+    ),
+    linear-gradient(160deg, rgba(18, 96, 64, 0.24), rgba(4, 34, 22, 0.32));
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.32);
+  overflow: hidden;
+}
+
+.table-rim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(212, 175, 55, 0.18);
+  background: radial-gradient(
+      ellipse at 50% 42%,
+      transparent 42%,
+      rgba(0, 0, 0, 0.22) 100%
+    ),
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.012) 0px,
+      rgba(255, 255, 255, 0.012) 2px,
+      transparent 2px,
+      transparent 7px
+    );
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+    inset 0 0 40px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+}
+
+.table--shake {
+  animation: table-shake 0.5s ease;
+}
+
+@keyframes table-shake {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  15% {
+    transform: translate(-4px, 2px) rotate(-0.35deg);
+  }
+  30% {
+    transform: translate(4px, -2px) rotate(0.35deg);
+  }
+  45% {
+    transform: translate(-3px, 1px);
+  }
+  60% {
+    transform: translate(3px, -1px);
+  }
+  75% {
+    transform: translate(-1px, 1px);
+  }
+}
+
+.table-mark {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  transform: translate(-50%, -50%);
+  width: clamp(110px, 26vw, 180px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: rgba(255, 232, 154, 0.075);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.table-mark__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(212, 175, 55, 0.12);
+  box-shadow: 0 0 0 10px rgba(212, 175, 55, 0.025),
+    inset 0 0 40px rgba(0, 0, 0, 0.14);
+}
+
+.table-mark__ring::before,
+.table-mark__ring::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.table-mark__ring::before {
+  inset: 12%;
+}
+
+.table-mark__ring::after {
+  inset: 26%;
+  border-style: dashed;
+  border-color: rgba(212, 175, 55, 0.09);
+}
+
+.table-mark__glyph {
+  font-size: clamp(56px, 14vw, 96px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  transform: rotate(-8deg);
+  font-family: "STKaiti", "KaiTi", system-ui, sans-serif;
+  text-shadow: 0 0 30px rgba(212, 175, 55, 0.08);
 }
 
 .seat-left {
@@ -468,29 +664,52 @@ onBeforeUnmount(() => {
 .bottom-cards {
   position: absolute;
   left: 50%;
-  top: 6px;
+  top: 8px;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  padding: 5px 10px 7px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(212, 175, 55, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 6px 16px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(4px);
 }
 
 .bottom-cards__label {
-  font-size: 10px;
-  letter-spacing: 0.24em;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  color: rgba(255, 226, 150, 0.66);
 }
 
 .bottom-cards__list {
   display: flex;
-  gap: 3px;
+  gap: 4px;
 }
 
 .bottom-card {
   width: 30px;
   border-radius: 4px;
   transition: transform 0.3s ease;
+}
+
+.bottom-card__face {
+  animation: card-flip-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes card-flip-in {
+  from {
+    opacity: 0;
+    transform: rotateY(90deg) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: rotateY(0) scale(1);
+  }
 }
 
 .action-zones {
@@ -503,25 +722,52 @@ onBeforeUnmount(() => {
   position: absolute;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 4px 6px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 3px;
+  padding: 5px 8px 6px;
+  border-radius: 12px;
+  background: linear-gradient(
+    160deg,
+    rgba(4, 30, 20, 0.84),
+    rgba(2, 17, 11, 0.74)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   max-width: 100%;
+  backdrop-filter: blur(6px);
+}
+
+.action-zone::after {
+  content: "";
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 6px solid transparent;
 }
 
 .action-zone--left {
   left: 8px;
-  top: 53%;
+  top: 118px;
   width: min(46%, 360px);
+}
+
+.action-zone--left::after {
+  top: -12px;
+  left: 22px;
+  border-bottom-color: rgba(4, 30, 20, 0.86);
 }
 
 .action-zone--right {
   right: 8px;
-  top: 53%;
+  top: 118px;
   width: min(46%, 360px);
   align-items: flex-end;
+}
+
+.action-zone--right::after {
+  top: -12px;
+  right: 22px;
+  border-bottom-color: rgba(4, 30, 20, 0.86);
 }
 
 .action-zone--human {
@@ -530,8 +776,22 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   width: min(92%, 720px);
   align-items: center;
-  background: rgba(212, 175, 55, 0.1);
-  border-color: rgba(212, 175, 55, 0.26);
+  background: linear-gradient(
+    160deg,
+    rgba(72, 58, 14, 0.84),
+    rgba(38, 30, 6, 0.78)
+  );
+  border-color: rgba(212, 175, 55, 0.34);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 20px rgba(212, 175, 55, 0.08);
+}
+
+.action-zone--human::after {
+  bottom: -12px;
+  left: 50%;
+  margin-left: -6px;
+  border-top-color: rgba(60, 48, 10, 0.82);
 }
 
 .action-zone--human .action-zone__head,
@@ -548,7 +808,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   width: 100%;
-  min-height: 12px;
+  min-height: 13px;
 }
 
 .action-zone--right .action-zone__head {
@@ -559,15 +819,19 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.78);
+  font-size: 10.5px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .action-zone__type {
-  font-size: 10px;
-  font-weight: 700;
-  color: #ffd75e;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #ffe38a;
+  background: rgba(212, 175, 55, 0.14);
+  border: 1px solid rgba(212, 175, 55, 0.28);
   white-space: nowrap;
 }
 
@@ -585,16 +849,55 @@ onBeforeUnmount(() => {
 .action-zone__card {
   flex: 0 0 auto;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+  animation: play-card-in 0.22s ease backwards;
+}
+
+@keyframes play-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .action-zone__text {
   font-size: 10px;
-  letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.42);
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.action-zone__text--pass {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: 8px;
+  color: #ffd3cf;
+  background: rgba(170, 52, 44, 0.2);
+  border: 1px dashed rgba(255, 150, 140, 0.5);
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  animation: pass-stamp 0.28s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+@keyframes pass-stamp {
+  from {
+    opacity: 0;
+    transform: scale(1.4) rotate(-6deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
 }
 
 .action-zone--right .action-zone__text {
   align-self: flex-end;
+}
+
+.action-zone--human .action-zone__text--pass {
+  align-self: center;
 }
 
 .footer {
@@ -614,6 +917,17 @@ onBeforeUnmount(() => {
 .human-meta__name {
   font-size: 12px;
   font-weight: 800;
+}
+
+.human-meta__count {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: #ffe89a;
+  background: rgba(212, 175, 55, 0.1);
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  font-variant-numeric: tabular-nums;
 }
 
 .human-meta__hint {
@@ -678,9 +992,18 @@ onBeforeUnmount(() => {
 }
 
 .hand-wrap {
+  position: relative;
   width: 100%;
   overflow: visible;
-  padding-top: 18px;
+  padding: 20px 0 6px;
+  border-radius: 18px;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.04),
+    rgba(0, 0, 0, 0.2)
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.035);
 }
 
 .hand {
@@ -809,6 +1132,12 @@ onBeforeUnmount(() => {
   }
 }
 
+@media (min-width: 600px) {
+  .table {
+    margin: 0 8px;
+  }
+}
+
 @media (max-width: 380px) {
   .seat-left {
     left: 4px;
@@ -818,11 +1147,14 @@ onBeforeUnmount(() => {
     right: 4px;
     --seat-w: 102px;
   }
+  .bottom-cards {
+    padding: 4px 7px 6px;
+  }
   .bottom-card {
-    width: 26px;
+    width: 24px;
   }
   .bottom-cards__list {
-    gap: 2px;
+    gap: 3px;
   }
   .action {
     min-width: 56px;

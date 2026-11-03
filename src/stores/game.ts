@@ -4,7 +4,8 @@ import type { Card, GamePhase, PlayInfo, Player, TableAction } from "@/game/type
 import { TYPE_LABEL } from "@/game/types";
 import { dealCards, sortCards } from "@/game/deck";
 import { canBeat, parsePlay } from "@/game/rules";
-import { chooseCall, chooseMove, generateBeatingMoves } from "@/game/moves";
+import { chooseCall, chooseMove, suggestMoves, type AIPlayerInfo, type MoveContext } from "@/game/ai";
+import type { Move } from "@/game/moves";
 import { playSound } from "@/game/sound";
 import { useSettingsStore } from "./settings";
 
@@ -60,6 +61,15 @@ export const useGameStore = defineStore("game", () => {
 
   let gameToken = 0;
   let aiTimer: ReturnType<typeof setTimeout> | null = null;
+  let hintKey = "";
+  let hintIndex = 0;
+  let hintMoves: Move[] = [];
+
+  function resetHint(): void {
+    hintKey = "";
+    hintIndex = 0;
+    hintMoves = [];
+  }
 
   const human = computed(() => players.value[0]);
   const currentPlayer = computed(
@@ -142,9 +152,26 @@ export const useGameStore = defineStore("game", () => {
     return createPlayers();
   }
 
+  function buildAIContext(selfUid: string): MoveContext {
+    const order: AIPlayerInfo[] = players.value.map((p) => ({
+      uid: p.uid,
+      isLandlord: p.isLandlord,
+      handCount: p.hand.length,
+    }));
+    const self = order.find((p) => p.uid === selfUid) ?? order[0];
+    const lord = players.value.find((p) => p.isLandlord);
+    return {
+      self,
+      players: order,
+      lastPlayerUid: lastPlayerUid.value,
+      landlordUid: lord?.uid ?? "",
+    };
+  }
+
   function newGame(): void {
     gameToken++;
     clearTimer();
+    resetHint();
     const dealt = dealCards();
     players.value = resetPlayers();
     players.value.forEach((p, i) => {
@@ -178,7 +205,7 @@ export const useGameStore = defineStore("game", () => {
           if (phase.value !== "call") return;
           const cur = currentPlayer.value;
           if (!cur || !cur.isRobot) return;
-          callLandlord(cur.uid, chooseCall(cur.hand));
+          callLandlord(cur.uid, chooseCall(cur.hand, callActed.value));
         }, 950);
       }
       return;
@@ -352,39 +379,63 @@ export const useGameStore = defineStore("game", () => {
     if (!isHumanTurn.value || humanAuto.value) return;
 
     const last = lastPlayInfo.value;
-    if (last && lastPlayerUid.value !== human.value.uid) {
-      const moves = generateBeatingMoves(human.value.hand, last);
-      if (moves.length === 0) {
-        selectedIds.value = [];
-        message.value = "没有能大过上家的牌";
-        sound("pass");
-        return;
-      }
-      const normal = moves.filter(
-        (m) => m.info.type !== "bomb" && m.info.type !== "kingBomb",
-      );
-      const pool = normal.length > 0 ? normal : moves;
-      pool.sort(
-        (a, b) => a.info.rank - b.info.rank || a.cards.length - b.cards.length,
-      );
-      selectedIds.value = pool[0].cards.map((c) => c.id);
-      message.value = `提示：${TYPE_LABEL[pool[0].info.type]}`;
-      sound("select");
+    const lastOwner = players.value.find(
+      (p) => p.uid === lastPlayerUid.value,
+    );
+    const lastIsTeammate =
+      !!lastOwner &&
+      !lastOwner.isLandlord &&
+      !human.value.isLandlord &&
+      lastOwner.uid !== human.value.uid;
+
+    if (last && lastIsTeammate) {
+      selectedIds.value = [];
+      message.value = "队友出牌，建议不出";
+      resetHint();
+      sound("pass");
       return;
     }
 
-    const move = chooseMove(human.value.hand, null, {
-      isFarmer: !human.value.isLandlord,
-      lastPlayerIsTeammate: false,
-      lastPlayerCardCount: 0,
-    });
-    if (move) {
-      selectedIds.value = move.cards.map((c) => c.id);
-      message.value = `提示：${TYPE_LABEL[move.info.type]}`;
-      sound("select");
+    const signature = [
+      human.value.hand
+        .map((c) => c.id)
+        .sort()
+        .join(","),
+      lastPlay.value
+        ? lastPlay.value
+            .map((c) => c.id)
+            .sort()
+            .join(",")
+        : "",
+      turnUid.value,
+    ].join("::");
+
+    if (signature !== hintKey || hintMoves.length === 0) {
+      hintMoves = suggestMoves(
+        human.value.hand,
+        last,
+        buildAIContext(human.value.uid),
+      );
+      hintKey = signature;
+      hintIndex = 0;
     } else {
-      message.value = "没有可出的牌";
+      hintIndex = (hintIndex + 1) % hintMoves.length;
     }
+
+    if (hintMoves.length === 0) {
+      selectedIds.value = [];
+      message.value = last ? "没有能大过上家的牌" : "没有可出的牌";
+      sound("pass");
+      return;
+    }
+
+    const move = hintMoves[hintIndex];
+    selectedIds.value = move.cards.map((c) => c.id);
+    message.value =
+      hintMoves.length > 1
+        ? `提示 ${hintIndex + 1}/${hintMoves.length}：${TYPE_LABEL[move.info.type]}`
+        : `提示：${TYPE_LABEL[move.info.type]}`;
+    sound("select");
   }
 
   function aiPlay(): void {
@@ -395,16 +446,7 @@ export const useGameStore = defineStore("game", () => {
     if (!auto) return;
 
     const lastInfo = lastPlayInfo.value;
-    const owner = lastPlayer.value;
-    const teammate =
-      lastInfo && owner
-        ? !owner.isLandlord && !player.isLandlord
-        : false;
-    const move = chooseMove(player.hand, lastInfo, {
-      isFarmer: !player.isLandlord,
-      lastPlayerIsTeammate: teammate,
-      lastPlayerCardCount: owner?.hand.length ?? 0,
-    });
+    const move = chooseMove(player.hand, lastInfo, buildAIContext(player.uid));
 
     if (move) {
       commitPlay(player, move.cards, move.info);
@@ -412,6 +454,16 @@ export const useGameStore = defineStore("game", () => {
     }
     if (lastInfo) {
       passTurn(player);
+      return;
+    }
+
+    // 理论上首出一定有牌可出；这里做兜底，避免 AI 卡住
+    const fallback = player.hand
+      .slice()
+      .sort((a, b) => a.rank - b.rank)[0];
+    const fallbackInfo = fallback ? parsePlay([fallback]) : null;
+    if (fallback && fallbackInfo) {
+      commitPlay(player, [fallback], fallbackInfo);
     }
   }
 
@@ -438,6 +490,7 @@ export const useGameStore = defineStore("game", () => {
   function resetToIdle(): void {
     gameToken++;
     clearTimer();
+    resetHint();
     phase.value = "idle";
     players.value = resetPlayers();
     bottomCards.value = [];
