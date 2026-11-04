@@ -372,15 +372,76 @@ function handCardStyle(index: number) {
   };
 }
 
-type DragMode = "select" | "deselect";
+interface DragState {
+  touched: Set<string>;
+  lastX: number;
+  lastY: number;
+}
 
-let dragState: { mode: DragMode } | null = null;
+let dragState: DragState | null = null;
 let suppressClickUntil = 0;
 
-function cardIdAtPoint(x: number, y: number): string | null {
-  const el = document.elementFromPoint(x, y) as HTMLElement | null;
-  const cardEl = el?.closest<HTMLElement>(".hand-card");
-  return cardEl?.dataset.cardId ?? null;
+interface CardHit {
+  id: string;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+function readCardHits(): CardHit[] {
+  return [...document.querySelectorAll<HTMLElement>(".hand-card")].map(
+    (el) => {
+      const rect = el.getBoundingClientRect();
+      return {
+        id: el.dataset.cardId ?? "",
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+      };
+    },
+  );
+}
+
+function cardIdAtPoint(
+  x: number,
+  y: number,
+  hits: CardHit[],
+  row: DOMRect | null,
+): string | null {
+  if (row && (y < row.top - 20 || y > row.bottom + 20)) return null;
+  let found: string | null = null;
+  for (const hit of hits) {
+    if (!hit.id) continue;
+    if (
+      x >= hit.left &&
+      x <= hit.right &&
+      y >= hit.top - 20 &&
+      y <= hit.bottom + 20
+    ) {
+      // 后面的牌层级更高，命中重叠区域时应选择它
+      found = hit.id;
+    }
+  }
+  return found;
+}
+
+function toggleCardOnce(cardId: string, silent: boolean): void {
+  if (!dragState || dragState.touched.has(cardId)) return;
+  dragState.touched.add(cardId);
+  game.selectCard(cardId, !isSelected(cardId), silent);
+}
+
+function applyDragPoint(
+  x: number,
+  y: number,
+  hits: CardHit[],
+  row: DOMRect | null,
+): void {
+  if (!dragState) return;
+  const id = cardIdAtPoint(x, y, hits, row);
+  if (id) toggleCardOnce(id, true);
 }
 
 function onCardPointerDown(event: PointerEvent, cardId: string): void {
@@ -388,10 +449,12 @@ function onCardPointerDown(event: PointerEvent, cardId: string): void {
   if (event.pointerType === "mouse" && event.button !== 0) return;
   event.preventDefault();
   suppressClickUntil = Date.now() + 400;
-
-  const mode: DragMode = isSelected(cardId) ? "deselect" : "select";
-  dragState = { mode };
-  game.selectCard(cardId, mode === "select");
+  dragState = {
+    touched: new Set<string>(),
+    lastX: event.clientX,
+    lastY: event.clientY,
+  };
+  toggleCardOnce(cardId, false);
 
   window.addEventListener("pointermove", onWindowPointerMove);
   window.addEventListener("pointerup", endDrag);
@@ -400,12 +463,30 @@ function onCardPointerDown(event: PointerEvent, cardId: string): void {
 
 function onWindowPointerMove(event: PointerEvent): void {
   if (!dragState) return;
-  const id = cardIdAtPoint(event.clientX, event.clientY);
-  if (!id) return;
-  const shouldSelect = dragState.mode === "select";
-  if (isSelected(id) !== shouldSelect) {
-    game.selectCard(id, shouldSelect, true);
+  const fromX = dragState.lastX;
+  const fromY = dragState.lastY;
+  const dx = event.clientX - fromX;
+  const dy = event.clientY - fromY;
+  const distance = Math.hypot(dx, dy);
+  if (distance < 1) return;
+
+  const hits = readCardHits();
+  const row =
+    document.querySelector<HTMLElement>(".hand")?.getBoundingClientRect() ??
+    null;
+
+  // 快速滑动时按 5px 采样，避免跳过中间重叠的牌
+  const steps = Math.max(1, Math.ceil(distance / 5));
+  for (let i = 1; i <= steps; i++) {
+    applyDragPoint(
+      fromX + (dx * i) / steps,
+      fromY + (dy * i) / steps,
+      hits,
+      row,
+    );
   }
+  dragState.lastX = event.clientX;
+  dragState.lastY = event.clientY;
 }
 
 function endDrag(): void {
