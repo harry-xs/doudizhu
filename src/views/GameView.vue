@@ -373,9 +373,10 @@ function handCardStyle(index: number) {
 }
 
 interface DragState {
-  touched: Set<string>;
+  activeId: string | null;
   lastX: number;
   lastY: number;
+  lastSign: number;
 }
 
 let dragState: DragState | null = null;
@@ -427,10 +428,10 @@ function cardIdAtPoint(
   return found;
 }
 
-function toggleCardOnce(cardId: string, silent: boolean): void {
-  if (!dragState || dragState.touched.has(cardId)) return;
-  dragState.touched.add(cardId);
-  game.selectCard(cardId, !isSelected(cardId), silent);
+function activateCard(cardId: string | null, silent: boolean): void {
+  if (!dragState || dragState.activeId === cardId) return;
+  dragState.activeId = cardId;
+  if (cardId) game.selectCard(cardId, !isSelected(cardId), silent);
 }
 
 function applyDragPoint(
@@ -441,7 +442,7 @@ function applyDragPoint(
 ): void {
   if (!dragState) return;
   const id = cardIdAtPoint(x, y, hits, row);
-  if (id) toggleCardOnce(id, true);
+  activateCard(id, true);
 }
 
 function onCardPointerDown(event: PointerEvent, cardId: string): void {
@@ -450,11 +451,12 @@ function onCardPointerDown(event: PointerEvent, cardId: string): void {
   event.preventDefault();
   suppressClickUntil = Date.now() + 400;
   dragState = {
-    touched: new Set<string>(),
+    activeId: null,
     lastX: event.clientX,
     lastY: event.clientY,
+    lastSign: 0,
   };
-  toggleCardOnce(cardId, false);
+  activateCard(cardId, false);
 
   window.addEventListener("pointermove", onWindowPointerMove);
   window.addEventListener("pointerup", endDrag);
@@ -469,6 +471,15 @@ function onWindowPointerMove(event: PointerEvent): void {
   const dy = event.clientY - fromY;
   const distance = Math.hypot(dx, dy);
   if (distance < 1) return;
+
+  const sign = dx > 0 ? 1 : dx < 0 ? -1 : 0;
+  if (Math.abs(dx) >= 4 && sign !== 0) {
+    if (dragState.lastSign !== 0 && sign !== dragState.lastSign) {
+      // 反向滑动时重置当前牌，让折返点那张牌也能重新切换
+      dragState.activeId = null;
+    }
+    dragState.lastSign = sign;
+  }
 
   const hits = readCardHits();
   const row =
