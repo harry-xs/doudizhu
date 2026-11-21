@@ -58,6 +58,7 @@ export const useGameStore = defineStore("game", () => {
   const round = ref(0);
   const winnerSide = ref<"landlord" | "farmer" | null>(null);
   const tableActions = ref<Record<string, TableAction>>({});
+  const resultReady = ref(false);
 
   let gameToken = 0;
   let aiTimer: ReturnType<typeof setTimeout> | null = null;
@@ -183,6 +184,7 @@ export const useGameStore = defineStore("game", () => {
     multiple.value = 1;
     winner.value = null;
     winnerSide.value = null;
+    resultReady.value = false;
     selectedIds.value = [];
     callActed.value = 0;
     passCount.value = 0;
@@ -274,17 +276,25 @@ export const useGameStore = defineStore("game", () => {
     if (player.hand.length > 0) return false;
     phase.value = "settle";
     clearTimer();
-    const lord = landlord.value;
-    if (!lord) return true;
-    const landlordWon = player.isLandlord;
-    winnerSide.value = landlordWon ? "landlord" : "farmer";
-    winner.value = landlordWon
-      ? [lord.uid]
-      : players.value.filter((p) => !p.isLandlord).map((p) => p.uid);
-    message.value = landlordWon ? "地主胜利" : "农民胜利";
+    resultReady.value = false;
 
-    const humanWon = winner.value.includes(human.value.uid);
-    sound(humanWon ? "win" : "lose");
+    const lord = landlord.value;
+    if (lord) {
+      const landlordWon = player.isLandlord;
+      winnerSide.value = landlordWon ? "landlord" : "farmer";
+      winner.value = landlordWon
+        ? [lord.uid]
+        : players.value.filter((p) => !p.isLandlord).map((p) => p.uid);
+      message.value = landlordWon ? "地主胜利" : "农民胜利";
+
+      const humanWon = winner.value.includes(human.value.uid);
+      sound(humanWon ? "win" : "lose");
+    }
+
+    // 先展示剩余手牌，动画结束后再弹出结算弹窗
+    schedule(() => {
+      resultReady.value = true;
+    }, settings.animation ? 3600 : 1200);
     return true;
   }
 
@@ -297,7 +307,7 @@ export const useGameStore = defineStore("game", () => {
     lastPlay.value = sortCards(cards);
     lastPlayerUid.value = player.uid;
     passCount.value = 0;
-    selectedIds.value = [];
+    if (player.uid === human.value.uid) selectedIds.value = [];
     tableActions.value = {
       ...tableActions.value,
       [player.uid]: {
@@ -354,7 +364,7 @@ export const useGameStore = defineStore("game", () => {
     passCount.value++;
     sound("pass");
     message.value = `${player.name} 不出`;
-    selectedIds.value = [];
+    if (player.uid === human.value.uid) selectedIds.value = [];
     tableActions.value = {
       ...tableActions.value,
       [player.uid]: { kind: "pass", cards: [], info: null },
@@ -505,6 +515,7 @@ export const useGameStore = defineStore("game", () => {
     lastPlayerUid.value = null;
     winner.value = null;
     winnerSide.value = null;
+    resultReady.value = false;
     selectedIds.value = [];
     message.value = "";
     turnUid.value = "";
@@ -525,6 +536,7 @@ export const useGameStore = defineStore("game", () => {
     message,
     round,
     winnerSide,
+    resultReady,
     tableActions,
     human,
     currentPlayer,

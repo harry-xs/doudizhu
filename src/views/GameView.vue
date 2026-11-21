@@ -68,33 +68,73 @@
           v-for="row in actionRows"
           :key="row.player.uid"
           class="action-zone"
-          :class="`action-zone--${row.placement}`"
+          :class="[
+            `action-zone--${row.placement}`,
+            { 'action-zone--reveal': revealing },
+          ]"
         >
           <div class="action-zone__head">
             <span class="action-zone__name">{{ row.player.name }}</span>
             <span
-              v-if="row.action && row.action.kind === 'play' && row.action.info"
+              v-if="revealing"
+              class="action-zone__type action-zone__type--reveal"
+            >
+              亮牌 {{ row.player.hand.length }} 张
+            </span>
+            <span
+              v-else-if="row.action && row.action.kind === 'play' && row.action.info"
               class="action-zone__type"
             >
               {{ TYPE_LABEL[row.action.info.type] }}
             </span>
           </div>
-          <div
-            v-if="row.action && row.action.kind === 'play'"
-            class="action-zone__cards"
-          >
+
+          <template v-if="revealing">
             <div
-              v-for="(card, i) in row.action.cards"
-              :key="card.id"
-              class="action-zone__card"
-              :style="actionCardStyle(i, row.placement, row.action.cards.length)"
+              v-if="row.player.hand.length > 0"
+              class="action-zone__cards action-zone__cards--reveal"
             >
-              <PlayingCard
-                :card="card"
-                :size="row.placement === 'human' ? 'xs' : 'tiny'"
-              />
+              <div
+                v-for="(card, i) in row.player.hand"
+                :key="card.id"
+                class="action-zone__card"
+                :style="
+                  actionCardStyle(
+                    i,
+                    row.placement,
+                    row.player.hand.length,
+                    true,
+                  )
+                "
+              >
+                <PlayingCard
+                  :card="card"
+                  :size="row.placement === 'human' ? 'xs' : 'tiny'"
+                />
+              </div>
             </div>
-          </div>
+            <span v-else class="action-zone__text action-zone__text--done">
+              <span class="action-zone__check">✓</span>
+              已出完
+            </span>
+          </template>
+
+          <template v-else-if="row.action && row.action.kind === 'play'">
+            <div class="action-zone__cards">
+              <div
+                v-for="(card, i) in row.action.cards"
+                :key="card.id"
+                class="action-zone__card"
+                :style="actionCardStyle(i, row.placement, row.action.cards.length)"
+              >
+                <PlayingCard
+                  :card="card"
+                  :size="row.placement === 'human' ? 'xs' : 'tiny'"
+                />
+              </div>
+            </div>
+          </template>
+
           <span
             v-else
             class="action-zone__text"
@@ -163,6 +203,10 @@
           <div v-else class="waiting">{{ game.actionHint }}</div>
         </template>
 
+        <template v-else-if="game.phase === 'settle'">
+          <div class="waiting">本局结束，正在亮牌…</div>
+        </template>
+
         <template v-else>
           <button
             type="button"
@@ -205,7 +249,7 @@
     </footer>
 
     <ResultModal
-      :show="game.phase === 'settle'"
+      :show="game.resultReady"
       :won="game.humanIsWinner"
       :side="game.winnerSide"
       :multiple="game.multiple"
@@ -272,6 +316,8 @@ const canSelect = computed(
   () => game.phase === "play" && !game.humanAuto,
 );
 
+const revealing = computed(() => game.phase === "settle");
+
 const actionRows = computed(() => {
   const rows: {
     player: Player;
@@ -333,6 +379,7 @@ function actionCardStyle(
   index: number,
   placement: "left" | "right" | "human",
   count: number,
+  reveal = false,
 ) {
   const width = handWidth.value || 360;
   const zoneWidth =
@@ -358,6 +405,9 @@ function actionCardStyle(
     width: `${cardWidth}px`,
     marginLeft: index === 0 ? "0" : `-${overlap}px`,
     zIndex: index + 1,
+    animationDelay: reveal
+      ? `${Math.min(index * 0.028, 0.5)}s`
+      : undefined,
   };
 }
 
@@ -1044,6 +1094,65 @@ onBeforeUnmount(() => {
 
 .action-zone--human .action-zone__text--pass {
   align-self: center;
+}
+
+.action-zone--reveal {
+  border-color: rgba(212, 175, 55, 0.42);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 24px rgba(212, 175, 55, 0.14);
+  animation: reveal-zone-in 0.35s ease backwards;
+}
+
+@keyframes reveal-zone-in {
+  from {
+    opacity: 0.6;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.action-zone--reveal.action-zone--left,
+.action-zone--reveal.action-zone--right {
+  background: linear-gradient(
+    160deg,
+    rgba(16, 45, 30, 0.92),
+    rgba(4, 24, 15, 0.88)
+  );
+}
+
+.action-zone__type--reveal {
+  color: #ffe38a;
+  background: rgba(212, 175, 55, 0.2);
+  border-color: rgba(212, 175, 55, 0.42);
+  letter-spacing: 0.04em;
+}
+
+.action-zone__cards--reveal {
+  min-height: 28px;
+}
+
+.action-zone__text--done {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffe38a;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.action-zone__check {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 900;
+  color: #3a2900;
+  background: linear-gradient(180deg, #ffe89a, #d4a92a);
 }
 
 .footer {
