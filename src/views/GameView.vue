@@ -79,7 +79,7 @@
               v-if="revealing"
               class="action-zone__type action-zone__type--reveal"
             >
-              亮牌 {{ row.player.hand.length }} 张
+              {{ revealLabel(row.player.hand.length, row.action) }}
             </span>
             <span
               v-else-if="row.action && row.action.kind === 'play' && row.action.info"
@@ -103,6 +103,29 @@
                     i,
                     row.placement,
                     row.player.hand.length,
+                    true,
+                  )
+                "
+              >
+                <PlayingCard
+                  :card="card"
+                  :size="row.placement === 'human' ? 'xs' : 'tiny'"
+                />
+              </div>
+            </div>
+            <div
+              v-else-if="row.action && row.action.kind === 'play'"
+              class="action-zone__cards action-zone__cards--reveal"
+            >
+              <div
+                v-for="(card, i) in row.action.cards"
+                :key="card.id"
+                class="action-zone__card"
+                :style="
+                  actionCardStyle(
+                    i,
+                    row.placement,
+                    row.action.cards.length,
                     true,
                   )
                 "
@@ -342,8 +365,15 @@ const actionRows = computed(() => {
   return rows;
 });
 
-function isSeatActive(uid: string): boolean {
-  return (
+function revealLabel(handCount: number, action: TableAction | null): string {
+  if (handCount > 0) return `亮牌 ${handCount} 张`;
+  if (action && action.kind === "play" && action.info) {
+    return TYPE_LABEL[action.info.type];
+  }
+  return "已出完";
+}
+
+function isSeatActive(uid: string): boolean {  return (
     (game.phase === "call" || game.phase === "play") && game.turnUid === uid
   );
 }
