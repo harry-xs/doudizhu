@@ -18,7 +18,7 @@ export interface Player {
   isTrustee: boolean;
 }
 
-export type GamePhase = "idle" | "call" | "play" | "settle";
+export type GamePhase = "idle" | "call" | "rob" | "double" | "play" | "settle";
 
 export interface GameState {
   phase: GamePhase;
@@ -48,6 +48,8 @@ export type CardType =
   | "plane"
   | "planeWithOne"
   | "planeWithTwo"
+  | "fourWithTwo"
+  | "fourWithTwoPairs"
   | "bomb"
   | "kingBomb";
 
@@ -74,6 +76,8 @@ export const TYPE_LABEL: Record<CardType, string> = {
   plane: "飞机",
   planeWithOne: "飞机带单",
   planeWithTwo: "飞机带对",
+  fourWithTwo: "四带二",
+  fourWithTwoPairs: "四带两对",
   bomb: "炸弹",
   kingBomb: "王炸",
 };

@@ -125,6 +125,26 @@ export function parsePlay(cards: Card[]): PlayInfo | null {
     };
   }
 
+  const fourRankIndex = countList.indexOf(4);
+  if (n === 6 && fourRankIndex >= 0) {
+    return {
+      type: "fourWithTwo",
+      rank: ranks[fourRankIndex],
+      length: 6,
+    };
+  }
+  if (
+    n === 8 &&
+    fourRankIndex >= 0 &&
+    countList.filter((c) => c === 2).length === 2
+  ) {
+    return {
+      type: "fourWithTwoPairs",
+      rank: ranks[fourRankIndex],
+      length: 8,
+    };
+  }
+
   if (n >= 5 && ranks.length === n && isConsecutive(ranks)) {
     return { type: "straight", rank: ranks[ranks.length - 1], length: n };
   }

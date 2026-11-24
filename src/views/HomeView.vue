@@ -17,12 +17,33 @@
             <PlayingCard :card="demoCards[2]" size="sm" />
           </div>
         </div>
+
+        <div class="wallet glass" @click="onWalletClick">
+          <span class="wallet__label">我的金豆</span>
+          <strong
+            class="wallet__value"
+            :class="{ 'wallet__value--neg': beans < 0 }"
+          >
+            {{ formatBeans(beans) }}
+          </strong>
+        </div>
+      </div>
+
+      <div class="rooms">
+        <button
+          v-for="room in ROOMS"
+          :key="room.id"
+          type="button"
+          class="room"
+          @click="startGame(room.id)"
+        >
+          <span class="room__name">{{ room.name }}</span>
+          <span class="room__mult">×{{ room.multiplier }}</span>
+          <span class="room__base">底豆 {{ BEAN_BASE }}</span>
+        </button>
       </div>
 
       <div class="actions">
-        <button type="button" class="btn btn-gold action action--main" @click="startGame">
-          开始游戏
-        </button>
         <div class="actions__row">
           <button type="button" class="btn btn-ghost action" @click="router.push('/rule')">
             游戏规则
@@ -37,23 +58,55 @@
     </main>
 
     <SettingsPanel :open="settingsOpen" @close="settingsOpen = false" />
+    <GoldAdminModal
+      :open="goldAdminOpen"
+      @close="goldAdminOpen = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { Card } from "@/game/types";
+import { BEAN_BASE, ROOMS, formatBeans } from "@/game/rooms";
 import PlayingCard from "@/components/PlayingCard.vue";
 import SettingsPanel from "@/components/SettingsPanel.vue";
+import GoldAdminModal from "@/components/GoldAdminModal.vue";
 import { useGameStore } from "@/stores/game";
+import { useWalletStore } from "@/stores/wallet";
 import { playSound } from "@/game/sound";
 import { useSettingsStore } from "@/stores/settings";
 
 const router = useRouter();
 const game = useGameStore();
+const wallet = useWalletStore();
 const settings = useSettingsStore();
 const settingsOpen = ref(false);
+const goldAdminOpen = ref(false);
+const beans = computed(() => wallet.get("p0"));
+
+let walletClicks = 0;
+let walletTimer: ReturnType<typeof setTimeout> | null = null;
+
+function onWalletClick(): void {
+  walletClicks++;
+  if (walletTimer) clearTimeout(walletTimer);
+  if (walletClicks >= 3) {
+    walletClicks = 0;
+    walletTimer = null;
+    goldAdminOpen.value = true;
+    return;
+  }
+  walletTimer = setTimeout(() => {
+    walletClicks = 0;
+    walletTimer = null;
+  }, 800);
+}
+
+onBeforeUnmount(() => {
+  if (walletTimer) clearTimeout(walletTimer);
+});
 
 const demoCards: Card[] = [
   { id: "demo-1", suit: "spade", rank: 14 },
@@ -61,9 +114,9 @@ const demoCards: Card[] = [
   { id: "demo-3", suit: "joker", rank: 17 },
 ];
 
-function startGame(): void {
+function startGame(roomId: string): void {
   playSound("button", settings.sound);
-  game.newGame();
+  game.newGame(roomId);
   void router.push("/game");
 }
 </script>
@@ -73,10 +126,10 @@ function startGame(): void {
   position: relative;
   min-height: 100dvh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 32px 20px calc(32px + env(safe-area-inset-bottom));
-  overflow: hidden;
+  padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+  overflow-y: auto;
 }
 
 .home::before {
@@ -98,6 +151,7 @@ function startGame(): void {
   flex-direction: column;
   align-items: center;
   text-align: center;
+  margin: auto 0;
 }
 
 .hero {
@@ -177,9 +231,85 @@ function startGame(): void {
   }
 }
 
+.wallet {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+  border-radius: 999px;
+}
+
+.wallet__label {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.wallet__value {
+  font-size: 18px;
+  font-weight: 900;
+  color: #ffd75e;
+  font-variant-numeric: tabular-nums;
+}
+
+.wallet__value--neg {
+  color: #ff9b9b;
+}
+
+.rooms {
+  width: min(340px, 100%);
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.room {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  background: linear-gradient(
+    165deg,
+    rgba(10, 45, 31, 0.72),
+    rgba(5, 26, 18, 0.62)
+  );
+  color: #fff;
+  text-align: left;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.room:hover {
+  transform: translateY(-2px);
+  border-color: rgba(212, 175, 55, 0.6);
+}
+
+.room__name {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.room__mult {
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  color: #ffd75e;
+}
+
+.room__base {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
 .actions {
   width: min(300px, 100%);
-  margin-top: 38px;
+  margin-top: 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;

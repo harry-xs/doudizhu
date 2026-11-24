@@ -2,6 +2,7 @@ import type { Card, Suit } from "../src/game/types";
 import { parsePlay, canBeat } from "../src/game/rules";
 import { dealCards, sortCards } from "../src/game/deck";
 import { chooseMove, chooseCall } from "../src/game/ai";
+import { generateBeatingMoves } from "../src/game/moves";
 
 let passed = 0;
 const failures: string[] = [];
@@ -55,6 +56,26 @@ check(
   "plane with one invalid length",
   tl([...many(3, 3), ...many(4, 3), card(5), card(6), card(7)]) === null,
 );
+check(
+  "fourWithTwo",
+  tl([...many(8, 4), card(4), card(5)]) === "fourWithTwo",
+);
+check(
+  "fourWithTwo with pair kickers",
+  tl([...many(8, 4), ...many(4, 2)]) === "fourWithTwo",
+);
+check(
+  "fourWithTwoPairs",
+  tl([...many(8, 4), ...many(4, 2), ...many(5, 2)]) === "fourWithTwoPairs",
+);
+check(
+  "fourWithTwo seven cards invalid",
+  tl([...many(8, 4), card(4), card(5), card(6)]) === null,
+);
+check(
+  "fourWithTwoPairs odd kickers invalid",
+  tl([...many(8, 4), ...many(4, 2), card(5), card(6)]) === null,
+);
 
 const pair4 = parsePlay(many(4, 2))!;
 const pair5 = parsePlay(many(5, 2))!;
@@ -69,6 +90,43 @@ check("different length straight cannot beat", !canBeat(straightB, straightA));
 check("bomb beats straight", canBeat(bomb, straightA));
 check("rocket beats bomb", canBeat(rocket, bomb));
 check("bomb cannot beat rocket", !canBeat(bomb, rocket));
+
+const fourWithTwo3 = parsePlay([...many(3, 4), card(4), card(5)])!;
+const fourWithTwo9 = parsePlay([...many(9, 4), card(4), card(5)])!;
+const fourWithTwoPairs3 = parsePlay([
+  ...many(3, 4),
+  ...many(4, 2),
+  ...many(5, 2),
+])!;
+
+check("higher fourWithTwo beats lower", canBeat(fourWithTwo9, fourWithTwo3));
+check(
+  "fourWithTwo cannot beat fourWithTwoPairs",
+  !canBeat(fourWithTwo9, fourWithTwoPairs3),
+);
+check("bomb beats fourWithTwo", canBeat(bomb, fourWithTwo9));
+
+const fourWithTwoMoves = generateBeatingMoves(
+  [...many(9, 4), card(3), card(4), ...many(10, 2)],
+  fourWithTwo3,
+);
+check(
+  "AI generates fourWithTwo",
+  fourWithTwoMoves.some(
+    (move) => move.info.type === "fourWithTwo" && move.info.rank === 9,
+  ),
+);
+
+const fourWithTwoPairsMoves = generateBeatingMoves(
+  [...many(9, 4), ...many(6, 2), ...many(7, 2), card(8)],
+  fourWithTwoPairs3,
+);
+check(
+  "AI generates fourWithTwoPairs",
+  fourWithTwoPairsMoves.some(
+    (move) => move.info.type === "fourWithTwoPairs" && move.info.rank === 9,
+  ),
+);
 
 let calls = 0;
 for (let i = 0; i < 200; i++) {

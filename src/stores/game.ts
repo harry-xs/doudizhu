@@ -7,9 +7,13 @@ import { canBeat, parsePlay } from "@/game/rules";
 import { chooseCall, chooseMove, suggestMoves, type AIPlayerInfo, type MoveContext } from "@/game/ai";
 import type { Move } from "@/game/moves";
 import { playSound } from "@/game/sound";
+import { getRoom, ROOMS, type Room } from "@/game/rooms";
+import { settleBeans, springFactor } from "@/game/settlement";
 import { useSettingsStore } from "./settings";
+import { useWalletStore } from "./wallet";
 
 const AI_NAMES = ["电脑小美", "电脑老王"];
+const DECISION_HOLD = 1200;
 
 function createPlayers(): Player[] {
   return [
@@ -42,6 +46,7 @@ function createPlayers(): Player[] {
 
 export const useGameStore = defineStore("game", () => {
   const settings = useSettingsStore();
+  const wallet = useWalletStore();
 
   const phase = ref<GamePhase>("idle");
   const players = ref<Player[]>(createPlayers());
@@ -58,8 +63,18 @@ export const useGameStore = defineStore("game", () => {
   const round = ref(0);
   const winnerSide = ref<"landlord" | "farmer" | null>(null);
   const tableActions = ref<Record<string, TableAction>>({});
+  const tableDecisions = ref<Record<string, string>>({});
   const resultReady = ref(false);
   const playedCards = ref<Card[]>([]);
+  const playCounts = ref<Record<string, number>>({});
+  const room = ref<Room>(ROOMS[0]);
+  const beanDeltas = ref<Record<string, number>>({});
+  const tentativeLandlordUid = ref<string | null>(null);
+  const robQueue = ref<string[]>([]);
+  const robIndex = ref(0);
+  const robHappened = ref(false);
+  const doubleActed = ref(0);
+  const decisionLocked = ref(false);
 
   let gameToken = 0;
   let aiTimer: ReturnType<typeof setTimeout> | null = null;
@@ -81,6 +96,18 @@ export const useGameStore = defineStore("game", () => {
     () => players.value.find((p) => p.isLandlord) ?? null,
   );
   const landlordConfirmed = computed(() => landlord.value !== null);
+  const isHumanRobTurn = computed(
+    () =>
+      !decisionLocked.value &&
+      phase.value === "rob" &&
+      turnUid.value === human.value.uid,
+  );
+  const isHumanDoubleTurn = computed(
+    () =>
+      !decisionLocked.value &&
+      phase.value === "double" &&
+      turnUid.value === human.value.uid,
+  );
   const lastPlayInfo = computed<PlayInfo | null>(() =>
     lastPlay.value ? parsePlay(lastPlay.value) : null,
   );
@@ -115,6 +142,18 @@ export const useGameStore = defineStore("game", () => {
       if (!currentPlayer.value) return "正在重新发牌...";
       if (turnUid.value === human.value.uid) return "请选择是否叫地主";
       return `${currentPlayer.value.name} 正在考虑...`;
+    }
+    if (phase.value === "rob") {
+      if (decisionLocked.value) return "";
+      if (!currentPlayer.value) return "正在重新发牌...";
+      if (turnUid.value === human.value.uid) return "请选择是否抢地主";
+      return `${currentPlayer.value.name} 正在考虑抢地主...`;
+    }
+    if (phase.value === "double") {
+      if (decisionLocked.value) return "";
+      if (!currentPlayer.value) return "正在结算...";
+      if (turnUid.value === human.value.uid) return "请选择是否加倍";
+      return `${currentPlayer.value.name} 正在考虑加倍...`;
     }
     if (phase.value === "play") {
       if (!isHumanTurn.value) {
@@ -154,6 +193,10 @@ export const useGameStore = defineStore("game", () => {
     return createPlayers();
   }
 
+  function setDecision(uid: string, text: string): void {
+    tableDecisions.value = { ...tableDecisions.value, [uid]: text };
+  }
+
   function buildAIContext(selfUid: string): MoveContext {
     const order: AIPlayerInfo[] = players.value.map((p) => ({
       uid: p.uid,
@@ -170,7 +213,8 @@ export const useGameStore = defineStore("game", () => {
     };
   }
 
-  function newGame(): void {
+  function newGame(roomId?: string): void {
+    if (roomId) room.value = getRoom(roomId);
     gameToken++;
     clearTimer();
     resetHint();
@@ -182,7 +226,7 @@ export const useGameStore = defineStore("game", () => {
     bottomCards.value = dealt.bottom;
     lastPlay.value = null;
     lastPlayerUid.value = null;
-    multiple.value = 1;
+    multiple.value = room.value.multiplier;
     winner.value = null;
     winnerSide.value = null;
     resultReady.value = false;
@@ -190,7 +234,16 @@ export const useGameStore = defineStore("game", () => {
     callActed.value = 0;
     passCount.value = 0;
     tableActions.value = {};
+    tableDecisions.value = {};
     playedCards.value = [];
+    playCounts.value = {};
+    beanDeltas.value = {};
+    tentativeLandlordUid.value = null;
+    robQueue.value = [];
+    robIndex.value = 0;
+    robHappened.value = false;
+    doubleActed.value = 0;
+    decisionLocked.value = false;
     round.value++;
     phase.value = "call";
 
@@ -211,6 +264,34 @@ export const useGameStore = defineStore("game", () => {
           if (!cur || !cur.isRobot) return;
           callLandlord(cur.uid, chooseCall(cur.hand, callActed.value));
         }, 950);
+      }
+      return;
+    }
+
+    if (phase.value === "rob") {
+      const p = currentPlayer.value;
+      if (!p) return;
+      if (p.isRobot) {
+        schedule(() => {
+          if (phase.value !== "rob") return;
+          const cur = currentPlayer.value;
+          if (!cur || !cur.isRobot) return;
+          robLandlord(cur.uid, Math.random() < 0.4);
+        }, 900);
+      }
+      return;
+    }
+
+    if (phase.value === "double") {
+      const p = currentPlayer.value;
+      if (!p) return;
+      if (p.isRobot) {
+        schedule(() => {
+          if (phase.value !== "double") return;
+          const cur = currentPlayer.value;
+          if (!cur || !cur.isRobot) return;
+          chooseDouble(cur.uid, aiDoubleLevel());
+        }, 800);
       }
       return;
     }
@@ -239,21 +320,29 @@ export const useGameStore = defineStore("game", () => {
     if (!player) return;
 
     if (call) {
-      player.isLandlord = true;
-      player.hand = sortCards([...player.hand, ...bottomCards.value]);
-      phase.value = "play";
-      turnUid.value = player.uid;
-      lastPlay.value = null;
-      lastPlayerUid.value = null;
-      passCount.value = 0;
-      multiple.value = 1;
-      message.value = `${player.name} 成为地主，获得底牌`;
+      const callerIndex = players.value.findIndex((p) => p.uid === uid);
+      tentativeLandlordUid.value = uid;
+      setDecision(uid, "叫地主");
+      robQueue.value = [1, 2, 0].map(
+        (step) =>
+          players.value[
+            (callerIndex + step) % players.value.length
+          ].uid,
+      );
+      robIndex.value = 0;
+      robHappened.value = false;
+      doubleActed.value = 0;
+      decisionLocked.value = false;
+      phase.value = "rob";
+      turnUid.value = robQueue.value[0];
+      message.value = `${player.name} 叫地主，等待抢地主`;
       sound("button");
       handleTurn();
       return;
     }
 
     callActed.value++;
+    setDecision(uid, "不叫");
     sound("pass");
     if (callActed.value >= 3) {
       turnUid.value = "";
@@ -274,6 +363,136 @@ export const useGameStore = defineStore("game", () => {
     callLandlord(human.value.uid, call);
   }
 
+  function advanceAfterRob(): void {
+    decisionLocked.value = false;
+    robIndex.value++;
+    if (robIndex.value >= robQueue.value.length) {
+      finalizeLandlord();
+      return;
+    }
+    const nextUid = robQueue.value[robIndex.value];
+    if (nextUid === tentativeLandlordUid.value) {
+      finalizeLandlord();
+      return;
+    }
+    turnUid.value = nextUid;
+    handleTurn();
+  }
+
+  function robLandlord(uid: string, rob: boolean): void {
+    if (decisionLocked.value) return;
+    if (phase.value !== "rob" || turnUid.value !== uid) return;
+    if (uid === tentativeLandlordUid.value) return;
+    const player = players.value.find((p) => p.uid === uid);
+    if (!player) return;
+    setDecision(uid, rob ? "抢地主" : "不抢");
+
+    if (rob) {
+      tentativeLandlordUid.value = uid;
+      multiple.value *= 2;
+      robHappened.value = true;
+      message.value = `${player.name} 抢地主，倍数 ×${multiple.value}`;
+      sound("button");
+    } else {
+      message.value = `${player.name} 不抢`;
+      sound("pass");
+    }
+
+    decisionLocked.value = true;
+    schedule(advanceAfterRob, DECISION_HOLD);
+  }
+
+  function humanRob(rob: boolean): void {
+    if (phase.value !== "rob" || turnUid.value !== human.value.uid) return;
+    robLandlord(human.value.uid, rob);
+  }
+
+  function finalizeLandlord(): void {
+    const lord = players.value.find(
+      (p) => p.uid === tentativeLandlordUid.value,
+    );
+    if (!lord) {
+      newGame();
+      return;
+    }
+    for (const player of players.value) {
+      player.isLandlord = player.uid === lord.uid;
+    }
+    lord.hand = sortCards([...lord.hand, ...bottomCards.value]);
+    tableDecisions.value = {};
+    phase.value = "double";
+    doubleActed.value = 0;
+    decisionLocked.value = false;
+    turnUid.value = lord.uid;
+    message.value = `${lord.name} 成为地主，获得底牌`;
+    sound("button");
+    handleTurn();
+  }
+
+  function aiDoubleLevel(): 0 | 1 | 2 {
+    const roll = Math.random();
+    if (roll < 0.4) return 0;
+    if (roll < 0.75) return 1;
+    return 2;
+  }
+
+  function advanceAfterDouble(): void {
+    decisionLocked.value = false;
+    doubleActed.value++;
+    if (doubleActed.value >= players.value.length) {
+      startPlay();
+      return;
+    }
+    advanceTurn();
+    handleTurn();
+  }
+
+  function chooseDouble(uid: string, level: 0 | 1 | 2): void {
+    if (decisionLocked.value) return;
+    if (phase.value !== "double" || turnUid.value !== uid) return;
+    const player = players.value.find((p) => p.uid === uid);
+    if (!player) return;
+    const label =
+      level === 2 ? "超级加倍" : level === 1 ? "加倍" : "不加倍";
+    setDecision(uid, label);
+
+    const factor = level === 2 ? 4 : level === 1 ? 2 : 1;
+    if (factor > 1) {
+      multiple.value *= factor;
+      message.value = `${player.name} ${label}，倍数 ×${multiple.value}`;
+      sound("button");
+    } else {
+      message.value = `${player.name} 不加倍`;
+      sound("pass");
+    }
+
+    decisionLocked.value = true;
+    schedule(advanceAfterDouble, DECISION_HOLD);
+  }
+
+  function humanDouble(level: 0 | 1 | 2): void {
+    if (phase.value !== "double" || turnUid.value !== human.value.uid) return;
+    chooseDouble(human.value.uid, level);
+  }
+
+  function startPlay(): void {
+    const lord = landlord.value;
+    phase.value = "play";
+    lastPlay.value = null;
+    lastPlayerUid.value = null;
+    passCount.value = 0;
+    selectedIds.value = [];
+    tableActions.value = {};
+    tableDecisions.value = {};
+    playedCards.value = [];
+    playCounts.value = {};
+    decisionLocked.value = false;
+    if (!lord) return;
+    turnUid.value = lord.uid;
+    message.value = `${lord.name} 先出牌`;
+    handleTurn();
+  }
+
   function checkWin(player: Player): boolean {
     if (player.hand.length > 0) return false;
     phase.value = "settle";
@@ -287,10 +506,34 @@ export const useGameStore = defineStore("game", () => {
       winner.value = landlordWon
         ? [lord.uid]
         : players.value.filter((p) => !p.isLandlord).map((p) => p.uid);
-      message.value = landlordWon ? "地主胜利" : "农民胜利";
+
+      const spring = springFactor({
+        landlordWon,
+        landlordPlayCount: playCounts.value[lord.uid] ?? 0,
+        farmerPlayCounts: players.value
+          .filter((p) => !p.isLandlord)
+          .map((p) => playCounts.value[p.uid] ?? 0),
+      });
+      if (spring > 1) multiple.value *= spring;
+      message.value =
+        (landlordWon ? "地主胜利" : "农民胜利") +
+        (spring > 1 ? (landlordWon ? "（春天 ×5）" : "（反春 ×5）") : "");
 
       const humanWon = winner.value.includes(human.value.uid);
       sound(humanWon ? "win" : "lose");
+
+      if (Object.keys(beanDeltas.value).length === 0) {
+        const { deltas } = settleBeans({
+          landlordUid: lord.uid,
+          farmerUids: players.value
+            .filter((p) => !p.isLandlord)
+            .map((p) => p.uid),
+          landlordWon,
+          multiple: multiple.value,
+        });
+        beanDeltas.value = deltas;
+        wallet.apply(deltas);
+      }
     }
 
     // 先展示剩余手牌，动画结束后再弹出结算弹窗
@@ -307,6 +550,10 @@ export const useGameStore = defineStore("game", () => {
     const ids = new Set(cards.map((c) => c.id));
     player.hand = player.hand.filter((c) => !ids.has(c.id));
     playedCards.value = [...playedCards.value, ...cards];
+    playCounts.value = {
+      ...playCounts.value,
+      [player.uid]: (playCounts.value[player.uid] ?? 0) + 1,
+    };
     lastPlay.value = sortCards(cards);
     lastPlayerUid.value = player.uid;
     passCount.value = 0;
@@ -522,9 +769,18 @@ export const useGameStore = defineStore("game", () => {
     selectedIds.value = [];
     message.value = "";
     turnUid.value = "";
-    multiple.value = 1;
+    multiple.value = room.value.multiplier;
     tableActions.value = {};
+    tableDecisions.value = {};
     playedCards.value = [];
+    playCounts.value = {};
+    beanDeltas.value = {};
+    tentativeLandlordUid.value = null;
+    robQueue.value = [];
+    robIndex.value = 0;
+    robHappened.value = false;
+    doubleActed.value = 0;
+    decisionLocked.value = false;
   }
 
   return {
@@ -542,11 +798,16 @@ export const useGameStore = defineStore("game", () => {
     winnerSide,
     resultReady,
     tableActions,
+    tableDecisions,
     playedCards,
+    room,
+    beanDeltas,
     human,
     currentPlayer,
     landlord,
     landlordConfirmed,
+    isHumanRobTurn,
+    isHumanDoubleTurn,
     lastPlayInfo,
     lastPlayer,
     isHumanTurn,
@@ -558,6 +819,8 @@ export const useGameStore = defineStore("game", () => {
     actionHint,
     newGame,
     humanCall,
+    humanRob,
+    humanDouble,
     humanPlay,
     humanPass,
     humanHint,

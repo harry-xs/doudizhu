@@ -19,6 +19,19 @@
           </div>
         </div>
 
+        <div
+          class="panel__gold"
+          :class="delta >= 0 ? 'panel__gold--gain' : 'panel__gold--loss'"
+        >
+          <span class="panel__gold-label">金豆</span>
+          <strong class="panel__gold-value">
+            {{ delta >= 0 ? "+" : "" }}{{ delta.toLocaleString("zh-CN") }}
+          </strong>
+          <span class="panel__gold-total">
+            余额 {{ gold.toLocaleString("zh-CN") }}
+          </span>
+        </div>
+
         <div class="panel__actions">
           <button type="button" class="btn btn-gold panel__btn" @click="$emit('restart')">
             再来一局
@@ -39,6 +52,8 @@ defineProps<{
   side: "landlord" | "farmer" | null;
   multiple: number;
   round: number;
+  gold: number;
+  delta: number;
 }>();
 
 defineEmits<{ (e: "restart"): void; (e: "home"): void }>();
@@ -136,6 +151,43 @@ defineEmits<{ (e: "restart"): void; (e: "home"): void }>();
   font-size: 20px;
   font-weight: 800;
   color: #ffd75e;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel__gold {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  margin: -8px 0 20px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.panel__gold-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.panel__gold-value {
+  font-size: 22px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel__gold--gain .panel__gold-value {
+  color: #ffe089;
+}
+
+.panel__gold--loss .panel__gold-value {
+  color: #ff9b9b;
+}
+
+.panel__gold-total {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
   font-variant-numeric: tabular-nums;
 }
 

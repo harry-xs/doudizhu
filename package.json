@@ -10,6 +10,7 @@
     "typecheck": "vue-tsc --noEmit",
     "test:engine": "tsx scripts/engine-sim.ts",
     "test:counter": "tsx scripts/counter-test.ts",
+    "test:beans": "tsx scripts/beans-test.ts",
     "test:ai": "tsx scripts/ai-bench.ts 2000"
   },
   "dependencies": {

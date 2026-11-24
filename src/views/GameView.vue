@@ -7,8 +7,8 @@
       <div class="scoreboard">
         <div class="scoreboard__stats">
           <div class="scoreboard__item">
-            <span class="scoreboard__label">局数</span>
-            <strong class="scoreboard__value">{{ game.round }}</strong>
+            <span class="scoreboard__label">底豆</span>
+            <strong class="scoreboard__value">{{ BEAN_BASE }}</strong>
           </div>
           <span class="scoreboard__divider"></span>
           <div class="scoreboard__item">
@@ -90,6 +90,9 @@
         >
           <div class="action-zone__head">
             <span class="action-zone__name">{{ row.player.name }}</span>
+            <span v-if="row.placement !== 'human'" class="action-zone__gold">
+              豆 {{ formatBeans(wallet.get(row.player.uid)) }}
+            </span>
             <span
               v-if="revealing && row.placement !== 'human'"
               class="action-zone__type action-zone__type--reveal"
@@ -174,6 +177,14 @@
           </template>
 
           <span
+            v-else-if="decisionText(row)"
+            class="action-zone__text action-zone__decision"
+            :class="{ 'action-zone__decision--neg': decisionNegative(row) }"
+          >
+            {{ decisionText(row) }}
+          </span>
+
+          <span
             v-else
             class="action-zone__text"
             :class="{
@@ -193,6 +204,9 @@
         <span v-else-if="game.landlordConfirmed" class="tag tag--farmer">农民</span>
         <span v-if="game.human.isTrustee" class="tag tag--trustee">托管中</span>
         <span class="human-meta__count">{{ game.human.hand.length }} 张</span>
+        <span class="human-meta__gold">
+          豆 {{ formatBeans(wallet.get(game.human.uid)) }}
+        </span>
         <span class="human-meta__hint">{{ game.actionHint }}</span>
       </div>
 
@@ -236,6 +250,33 @@
             </button>
             <button type="button" class="btn btn-gold action action--wide" @click="game.humanCall(true)">
               叫地主
+            </button>
+          </template>
+          <div v-else class="waiting">{{ game.actionHint }}</div>
+        </template>
+
+        <template v-else-if="game.phase === 'rob'">
+          <template v-if="game.isHumanRobTurn">
+            <button type="button" class="btn btn-ghost action" @click="game.humanRob(false)">
+              不 抢
+            </button>
+            <button type="button" class="btn btn-gold action action--wide" @click="game.humanRob(true)">
+              抢地主
+            </button>
+          </template>
+          <div v-else class="waiting">{{ game.actionHint }}</div>
+        </template>
+
+        <template v-else-if="game.phase === 'double'">
+          <template v-if="game.isHumanDoubleTurn">
+            <button type="button" class="btn btn-ghost action" @click="game.humanDouble(0)">
+              不加倍
+            </button>
+            <button type="button" class="btn btn-ghost action action--double" @click="game.humanDouble(1)">
+              加倍
+            </button>
+            <button type="button" class="btn btn-gold action action--super" @click="game.humanDouble(2)">
+              超级加倍
             </button>
           </template>
           <div v-else class="waiting">{{ game.actionHint }}</div>
@@ -292,6 +333,8 @@
       :side="game.winnerSide"
       :multiple="game.multiple"
       :round="game.round"
+      :gold="wallet.get(game.human.uid)"
+      :delta="game.beanDeltas[game.human.uid] ?? 0"
       @restart="restart"
       @home="goHome"
     />
@@ -304,6 +347,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useGameStore } from "@/stores/game";
 import { useSettingsStore } from "@/stores/settings";
+import { useWalletStore } from "@/stores/wallet";
+import { BEAN_BASE, formatBeans } from "@/game/rooms";
 import { canBeat, parsePlay } from "@/game/rules";
 import { generateBeatingMoves } from "@/game/moves";
 import { TYPE_LABEL } from "@/game/types";
@@ -318,6 +363,7 @@ import CardCounter from "@/components/CardCounter.vue";
 const router = useRouter();
 const game = useGameStore();
 const settings = useSettingsStore();
+const wallet = useWalletStore();
 
 const settingsOpen = ref(false);
 const shaking = ref(false);
@@ -374,7 +420,10 @@ const actionRows = computed(() => {
   for (const [player, placement] of entries) {
     if (!player) continue;
     const action = game.tableActions[player.uid] ?? null;
-    let status = game.phase === "call" ? "等待叫地主" : "等待出牌";
+    let status = "等待出牌";
+    if (game.phase === "call") status = "等待叫地主";
+    else if (game.phase === "rob") status = "等待抢地主";
+    else if (game.phase === "double") status = "等待加倍";
     if (action?.kind === "pass") status = "不出";
     else if (action?.kind === "play") status = "";
     else if (player.hand.length === 0) status = "已出完";
@@ -383,6 +432,22 @@ const actionRows = computed(() => {
   return rows;
 });
 
+function decisionText(row: { player: Player }): string | null {
+  if (
+    game.phase !== "call" &&
+    game.phase !== "rob" &&
+    game.phase !== "double"
+  ) {
+    return null;
+  }
+  return game.tableDecisions[row.player.uid] ?? null;
+}
+
+function decisionNegative(row: { player: Player }): boolean {
+  const text = decisionText(row);
+  return text === "不叫" || text === "不抢" || text === "不加倍";
+}
+
 function revealLabel(handCount: number, action: TableAction | null): string {
   if (handCount > 0) return `亮牌 ${handCount} 张`;
   if (action && action.kind === "play" && action.info) {
@@ -390,10 +455,13 @@ function revealLabel(handCount: number, action: TableAction | null): string {
   }
   return "已出完";
 }
-
-function isSeatActive(uid: string): boolean {  return (
-    (game.phase === "call" || game.phase === "play") && game.turnUid === uid
-  );
+function isSeatActive(uid: string): boolean {
+  const active =
+    game.phase === "call" ||
+    game.phase === "rob" ||
+    game.phase === "double" ||
+    game.phase === "play";
+  return active && game.turnUid === uid;
 }
 
 const handLayout = computed(() => {
@@ -1094,6 +1162,19 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.82);
 }
 
+.action-zone__gold {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  color: #ffe38a;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .action-zone__type {
   padding: 1px 6px;
   border-radius: 999px;
@@ -1139,6 +1220,43 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.4);
 }
 
+.action-zone__decision {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  margin: 2px 0;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  color: #3a2900;
+  background: linear-gradient(180deg, #ffe89a, #d4a92a);
+  border: 1px solid rgba(255, 248, 216, 0.8);
+  box-shadow: 0 0 12px rgba(255, 215, 94, 0.35);
+  animation: decision-pop 0.22s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.action-zone__decision--neg {
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.24);
+  box-shadow: none;
+}
+
+@keyframes decision-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .action-zone__text--pass {
   align-self: flex-start;
   padding: 2px 10px;
@@ -1164,6 +1282,15 @@ onBeforeUnmount(() => {
 
 .action-zone--right .action-zone__text {
   align-self: flex-end;
+}
+
+.action-zone--left .action-zone__decision,
+.action-zone--right .action-zone__decision,
+.action-zone--human .action-zone__decision {
+  align-self: center;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
 }
 
 .action-zone--human .action-zone__text--pass {
@@ -1257,6 +1384,18 @@ onBeforeUnmount(() => {
   background: rgba(212, 175, 55, 0.1);
   border: 1px solid rgba(212, 175, 55, 0.28);
   font-variant-numeric: tabular-nums;
+}
+
+.human-meta__gold {
+  font-size: 12.5px;
+  font-weight: 900;
+  padding: 2px 9px;
+  border-radius: 999px;
+  color: #ffd75e;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .human-meta__hint {
@@ -1420,6 +1559,17 @@ onBeforeUnmount(() => {
   flex: 1;
   max-width: 150px;
   letter-spacing: 0.1em;
+}
+
+.action--double {
+  min-width: 58px;
+  padding: 0 10px;
+}
+
+.action--super {
+  min-width: 76px;
+  padding: 0 10px;
+  font-size: 13px;
 }
 
 .action--hint {

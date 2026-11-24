@@ -159,6 +159,17 @@ export function generateBeatingMoves(hand: Card[], last: PlayInfo): Move[] {
       }
       break;
     }
+    case "fourWithTwo":
+    case "fourWithTwoPairs": {
+      const asPairs = last.type === "fourWithTwoPairs";
+      for (const rank of ranks) {
+        if (rank <= last.rank || groups.get(rank)!.length < 4) continue;
+        const used = groups.get(rank)!.slice(0, 4);
+        const kicker = pickKickers(hand, used, 2, asPairs, new Set([rank]));
+        if (kicker) add([...used, ...kicker]);
+      }
+      break;
+    }
     case "bomb":
     case "kingBomb":
       break;
@@ -200,7 +211,14 @@ export function generateAllMoves(hand: Card[]): Move[] {
     add([group[0]]);
     if (group.length >= 2) add(group.slice(0, 2));
     if (group.length >= 3) add(group.slice(0, 3));
-    if (group.length >= 4) add(group.slice(0, 4));
+    if (group.length >= 4) {
+      add(group.slice(0, 4));
+      const used = group.slice(0, 4);
+      const two = pickKickers(hand, used, 2, false, new Set([rank]));
+      if (two) add([...used, ...two]);
+      const twoPairs = pickKickers(hand, used, 2, true, new Set([rank]));
+      if (twoPairs) add([...used, ...twoPairs]);
+    }
 
     if (group.length >= 3) {
       const used = group.slice(0, 3);
