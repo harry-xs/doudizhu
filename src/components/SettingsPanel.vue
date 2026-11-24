@@ -36,6 +36,22 @@
           </button>
         </div>
 
+        <div class="row">
+          <div class="row__label">
+            <span>记牌器</span>
+            <small>显示对手手中各点数的剩余张数</small>
+          </div>
+          <button
+            type="button"
+            class="switch"
+            :class="{ 'switch--on': settings.counter }"
+            :aria-pressed="settings.counter"
+            @click="settings.toggleCounter()"
+          >
+            <span class="switch__thumb"></span>
+          </button>
+        </div>
+
         <button type="button" class="btn btn-primary panel__done" @click="$emit('close')">
           完 成
         </button>

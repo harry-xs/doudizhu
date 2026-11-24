@@ -5,20 +5,35 @@
         ←
       </button>
       <div class="scoreboard">
-        <div class="scoreboard__item">
-          <span class="scoreboard__label">局数</span>
-          <strong class="scoreboard__value">{{ game.round }}</strong>
+        <div class="scoreboard__stats">
+          <div class="scoreboard__item">
+            <span class="scoreboard__label">局数</span>
+            <strong class="scoreboard__value">{{ game.round }}</strong>
+          </div>
+          <span class="scoreboard__divider"></span>
+          <div class="scoreboard__item">
+            <span class="scoreboard__label">倍数</span>
+            <strong class="scoreboard__value scoreboard__value--gold">×{{ game.multiple }}</strong>
+          </div>
         </div>
-        <span class="scoreboard__divider"></span>
-        <div class="scoreboard__item">
-          <span class="scoreboard__label">倍数</span>
-          <strong class="scoreboard__value scoreboard__value--gold">×{{ game.multiple }}</strong>
-        </div>
+        <CardCounter v-if="settings.counter" class="scoreboard__counter" />
       </div>
-      <button type="button" class="icon-btn icon-btn--text" @click="settingsOpen = true">
-        设置
-      </button>
+      <div class="header-actions">
+        <button
+          type="button"
+          class="icon-btn icon-btn--text"
+          :class="{ 'icon-btn--on': settings.counter }"
+          :aria-pressed="settings.counter"
+          @click="settings.toggleCounter()"
+        >
+          记牌
+        </button>
+        <button type="button" class="icon-btn icon-btn--text" @click="settingsOpen = true">
+          设置
+        </button>
+      </div>
     </header>
+
 
     <main class="table" :class="{ 'table--shake': shaking }">
       <div class="table-rim" aria-hidden="true"></div>
@@ -70,13 +85,13 @@
           class="action-zone"
           :class="[
             `action-zone--${row.placement}`,
-            { 'action-zone--reveal': revealing },
+            { 'action-zone--reveal': revealing && row.placement !== 'human' },
           ]"
         >
           <div class="action-zone__head">
             <span class="action-zone__name">{{ row.player.name }}</span>
             <span
-              v-if="revealing"
+              v-if="revealing && row.placement !== 'human'"
               class="action-zone__type action-zone__type--reveal"
             >
               {{ revealLabel(row.player.hand.length, row.action) }}
@@ -89,7 +104,7 @@
             </span>
           </div>
 
-          <template v-if="revealing">
+          <template v-if="revealing && row.placement !== 'human'">
             <div
               v-if="row.player.hand.length > 0"
               class="action-zone__cards action-zone__cards--reveal"
@@ -288,6 +303,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useGameStore } from "@/stores/game";
+import { useSettingsStore } from "@/stores/settings";
 import { canBeat, parsePlay } from "@/game/rules";
 import { generateBeatingMoves } from "@/game/moves";
 import { TYPE_LABEL } from "@/game/types";
@@ -297,9 +313,11 @@ import CardBack from "@/components/CardBack.vue";
 import PlayerSeat from "@/components/PlayerSeat.vue";
 import ResultModal from "@/components/ResultModal.vue";
 import SettingsPanel from "@/components/SettingsPanel.vue";
+import CardCounter from "@/components/CardCounter.vue";
 
 const router = useRouter();
 const game = useGameStore();
+const settings = useSettingsStore();
 
 const settingsOpen = ref(false);
 const shaking = ref(false);
@@ -691,8 +709,12 @@ onBeforeUnmount(() => {
 .scoreboard {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 5px 15px;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 5px 14px;
   border-radius: 14px;
   background: linear-gradient(
     180deg,
@@ -703,6 +725,16 @@ onBeforeUnmount(() => {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 4px 12px rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(6px);
+}
+
+.scoreboard__stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scoreboard__counter {
+  min-width: 0;
 }
 
 .scoreboard__item {
@@ -758,6 +790,18 @@ onBeforeUnmount(() => {
 .icon-btn--text {
   font-size: 12px;
   font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-btn--on {
+  border-color: rgba(212, 175, 55, 0.7);
+  background: rgba(212, 175, 55, 0.22);
+  color: #ffe89a;
 }
 
 .table {
@@ -1429,6 +1473,29 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 380px) {
+  .game__header {
+    gap: 6px;
+    padding: calc(6px + env(safe-area-inset-top)) 8px 6px;
+  }
+  .icon-btn {
+    min-width: 32px;
+    height: 30px;
+    padding: 0 8px;
+    font-size: 14px;
+  }
+  .icon-btn--text {
+    font-size: 11px;
+  }
+  .scoreboard {
+    gap: 4px 8px;
+    padding: 4px 10px;
+  }
+  .scoreboard__stats {
+    gap: 8px;
+  }
+  .scoreboard__item {
+    min-width: 32px;
+  }
   .seat-left {
     left: 4px;
     --seat-w: 102px;

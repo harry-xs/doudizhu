@@ -59,6 +59,7 @@ export const useGameStore = defineStore("game", () => {
   const winnerSide = ref<"landlord" | "farmer" | null>(null);
   const tableActions = ref<Record<string, TableAction>>({});
   const resultReady = ref(false);
+  const playedCards = ref<Card[]>([]);
 
   let gameToken = 0;
   let aiTimer: ReturnType<typeof setTimeout> | null = null;
@@ -189,6 +190,7 @@ export const useGameStore = defineStore("game", () => {
     callActed.value = 0;
     passCount.value = 0;
     tableActions.value = {};
+    playedCards.value = [];
     round.value++;
     phase.value = "call";
 
@@ -304,6 +306,7 @@ export const useGameStore = defineStore("game", () => {
 
     const ids = new Set(cards.map((c) => c.id));
     player.hand = player.hand.filter((c) => !ids.has(c.id));
+    playedCards.value = [...playedCards.value, ...cards];
     lastPlay.value = sortCards(cards);
     lastPlayerUid.value = player.uid;
     passCount.value = 0;
@@ -521,6 +524,7 @@ export const useGameStore = defineStore("game", () => {
     turnUid.value = "";
     multiple.value = 1;
     tableActions.value = {};
+    playedCards.value = [];
   }
 
   return {
@@ -538,6 +542,7 @@ export const useGameStore = defineStore("game", () => {
     winnerSide,
     resultReady,
     tableActions,
+    playedCards,
     human,
     currentPlayer,
     landlord,

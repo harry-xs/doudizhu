@@ -12,24 +12,30 @@ function loadSetting(): AppSetting {
       return {
         sound: parsed.sound !== false,
         animation: parsed.animation !== false,
+        counter: parsed.counter !== false,
       };
     }
   } catch {
     // 读取失败时使用默认配置
   }
-  return { sound: true, animation: true };
+  return { sound: true, animation: true, counter: true };
 }
 
 export const useSettingsStore = defineStore("settings", () => {
   const initial = loadSetting();
   const sound = ref(initial.sound);
   const animation = ref(initial.animation);
+  const counter = ref(initial.counter);
 
   function persist(): void {
     try {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ sound: sound.value, animation: animation.value }),
+        JSON.stringify({
+          sound: sound.value,
+          animation: animation.value,
+          counter: counter.value,
+        }),
       );
     } catch {
       // localStorage 不可用时静默降级
@@ -46,5 +52,17 @@ export const useSettingsStore = defineStore("settings", () => {
     persist();
   }
 
-  return { sound, animation, toggleSound, toggleAnimation };
+  function toggleCounter(): void {
+    counter.value = !counter.value;
+    persist();
+  }
+
+  return {
+    sound,
+    animation,
+    counter,
+    toggleSound,
+    toggleAnimation,
+    toggleCounter,
+  };
 });

@@ -34,6 +34,7 @@ export interface GameState {
 export interface AppSetting {
   sound: boolean;
   animation: boolean;
+  counter: boolean;
 }
 
 export type CardType =
