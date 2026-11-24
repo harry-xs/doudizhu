@@ -19,12 +19,12 @@
         </div>
 
         <div class="wallet glass" @click="onWalletClick">
-          <span class="wallet__label">我的金豆</span>
+          <span class="wallet__label">我的余额</span>
           <strong
             class="wallet__value"
             :class="{ 'wallet__value--neg': beans < 0 }"
           >
-            {{ formatBeans(beans) }}
+            ${{ formatBeans(beans) }}
           </strong>
         </div>
       </div>
@@ -35,11 +35,20 @@
           :key="room.id"
           type="button"
           class="room"
+          :class="{ 'room--locked': beans < room.minBeans }"
+          :disabled="beans < room.minBeans"
+          :title="
+            beans < room.minBeans
+              ? `余额不足，需 $${formatBeans(room.minBeans)}`
+              : ''
+          "
           @click="startGame(room.id)"
         >
           <span class="room__name">{{ room.name }}</span>
           <span class="room__mult">×{{ room.multiplier }}</span>
-          <span class="room__base">底豆 {{ BEAN_BASE }}</span>
+          <span class="room__base">
+            {{ room.minBeans > 0 ? `入场 $${formatBeans(room.minBeans)}` : "无门槛" }}
+          </span>
         </button>
       </div>
 
@@ -53,8 +62,6 @@
           </button>
         </div>
       </div>
-
-      <p class="home__foot">纯前端实现 · 支持添加到桌面离线游玩</p>
     </main>
 
     <SettingsPanel :open="settingsOpen" @close="settingsOpen = false" />
@@ -69,7 +76,7 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { Card } from "@/game/types";
-import { BEAN_BASE, ROOMS, formatBeans } from "@/game/rooms";
+import { ROOMS, formatBeans } from "@/game/rooms";
 import PlayingCard from "@/components/PlayingCard.vue";
 import SettingsPanel from "@/components/SettingsPanel.vue";
 import GoldAdminModal from "@/components/GoldAdminModal.vue";
@@ -115,6 +122,8 @@ const demoCards: Card[] = [
 ];
 
 function startGame(roomId: string): void {
+  const room = ROOMS.find((item) => item.id === roomId);
+  if (!room || beans.value < room.minBeans) return;
   playSound("button", settings.sound);
   game.newGame(roomId);
   void router.push("/game");
@@ -285,9 +294,18 @@ function startGame(roomId: string): void {
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
 
-.room:hover {
+.room:hover:not(:disabled) {
   transform: translateY(-2px);
   border-color: rgba(212, 175, 55, 0.6);
+}
+
+.room--locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.room--locked .room__base {
+  color: #ff9b9b;
 }
 
 .room__name {
@@ -338,10 +356,4 @@ function startGame(roomId: string): void {
   font-size: 14px;
 }
 
-.home__foot {
-  margin: 30px 0 0;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.42);
-}
 </style>

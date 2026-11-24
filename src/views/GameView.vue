@@ -7,8 +7,8 @@
       <div class="scoreboard">
         <div class="scoreboard__stats">
           <div class="scoreboard__item">
-            <span class="scoreboard__label">底豆</span>
-            <strong class="scoreboard__value">{{ BEAN_BASE }}</strong>
+            <span class="scoreboard__label">底注</span>
+            <strong class="scoreboard__value">${{ BEAN_BASE }}</strong>
           </div>
           <span class="scoreboard__divider"></span>
           <div class="scoreboard__item">
@@ -48,6 +48,8 @@
         side="left"
         :active="isSeatActive(leftPlayer.uid)"
         :landlord-confirmed="game.landlordConfirmed"
+        :delta="game.beanDeltas[leftPlayer.uid] ?? 0"
+        :settled="game.phase === 'settle'"
       />
       <PlayerSeat
         v-if="rightPlayer"
@@ -56,6 +58,8 @@
         side="right"
         :active="isSeatActive(rightPlayer.uid)"
         :landlord-confirmed="game.landlordConfirmed"
+        :delta="game.beanDeltas[rightPlayer.uid] ?? 0"
+        :settled="game.phase === 'settle'"
       />
 
       <div class="bottom-cards">
@@ -91,7 +95,7 @@
           <div class="action-zone__head">
             <span class="action-zone__name">{{ row.player.name }}</span>
             <span v-if="row.placement !== 'human'" class="action-zone__gold">
-              豆 {{ formatBeans(wallet.get(row.player.uid)) }}
+              ${{ formatBeans(wallet.get(row.player.uid)) }}
             </span>
             <span
               v-if="revealing && row.placement !== 'human'"
@@ -198,6 +202,15 @@
     </main>
 
     <footer class="footer">
+      <div
+        v-if="game.phase === 'settle'"
+        class="human-delta"
+        :class="{
+          'human-delta--neg': (game.beanDeltas[game.human.uid] ?? 0) < 0,
+        }"
+      >
+        {{ formatDelta(game.beanDeltas[game.human.uid] ?? 0) }}
+      </div>
       <div class="human-meta">
         <span class="human-meta__name">我</span>
         <span v-if="game.human.isLandlord" class="tag tag--lord">地主</span>
@@ -205,7 +218,7 @@
         <span v-if="game.human.isTrustee" class="tag tag--trustee">托管中</span>
         <span class="human-meta__count">{{ game.human.hand.length }} 张</span>
         <span class="human-meta__gold">
-          豆 {{ formatBeans(wallet.get(game.human.uid)) }}
+          ${{ formatBeans(wallet.get(game.human.uid)) }}
         </span>
         <span class="human-meta__hint">{{ game.actionHint }}</span>
       </div>
@@ -337,6 +350,7 @@
       :delta="game.beanDeltas[game.human.uid] ?? 0"
       @restart="restart"
       @home="goHome"
+      @close="game.dismissResult()"
     />
 
     <SettingsPanel :open="settingsOpen" @close="settingsOpen = false" />
@@ -348,7 +362,7 @@ import { useRouter } from "vue-router";
 import { useGameStore } from "@/stores/game";
 import { useSettingsStore } from "@/stores/settings";
 import { useWalletStore } from "@/stores/wallet";
-import { BEAN_BASE, formatBeans } from "@/game/rooms";
+import { BEAN_BASE, formatBeans, formatDelta } from "@/game/rooms";
 import { canBeat, parsePlay } from "@/game/rules";
 import { generateBeatingMoves } from "@/game/moves";
 import { TYPE_LABEL } from "@/game/types";
@@ -1360,6 +1374,33 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   padding: 0 8px calc(8px + env(safe-area-inset-bottom));
   background: linear-gradient(180deg, transparent, rgba(6, 30, 20, 0.55) 30%);
+}
+
+.human-delta {
+  text-align: center;
+  padding: 4px 0 2px;
+  font-size: clamp(28px, 9vw, 44px);
+  font-weight: 900;
+  line-height: 1.05;
+  color: #ffd75e;
+  text-shadow: 0 3px 12px rgba(0, 0, 0, 0.55);
+  font-variant-numeric: tabular-nums;
+  animation: human-delta-in 0.25s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+
+.human-delta--neg {
+  color: #ff8b8b;
+}
+
+@keyframes human-delta-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .human-meta {

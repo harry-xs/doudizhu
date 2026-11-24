@@ -8,7 +8,7 @@ import { chooseCall, chooseMove, suggestMoves, type AIPlayerInfo, type MoveConte
 import type { Move } from "@/game/moves";
 import { playSound } from "@/game/sound";
 import { getRoom, ROOMS, type Room } from "@/game/rooms";
-import { settleBeans, springFactor } from "@/game/settlement";
+import { settleBeansWithBankruptcy, springFactor } from "@/game/settlement";
 import { useSettingsStore } from "./settings";
 import { useWalletStore } from "./wallet";
 
@@ -523,16 +523,22 @@ export const useGameStore = defineStore("game", () => {
       sound(humanWon ? "win" : "lose");
 
       if (Object.keys(beanDeltas.value).length === 0) {
-        const { deltas } = settleBeans({
+        const farmerUids = players.value
+          .filter((p) => !p.isLandlord)
+          .map((p) => p.uid);
+        const balances: Record<string, number> = {};
+        for (const player of players.value) {
+          balances[player.uid] = wallet.get(player.uid);
+        }
+        const result = settleBeansWithBankruptcy({
+          balances,
           landlordUid: lord.uid,
-          farmerUids: players.value
-            .filter((p) => !p.isLandlord)
-            .map((p) => p.uid),
+          farmerUids,
           landlordWon,
           multiple: multiple.value,
         });
-        beanDeltas.value = deltas;
-        wallet.apply(deltas);
+        beanDeltas.value = result.deltas;
+        wallet.setAll(result.balances);
       }
     }
 
@@ -754,6 +760,10 @@ export const useGameStore = defineStore("game", () => {
     }
   }
 
+  function dismissResult(): void {
+    resultReady.value = false;
+  }
+
   function resetToIdle(): void {
     gameToken++;
     clearTimer();
@@ -829,6 +839,7 @@ export const useGameStore = defineStore("game", () => {
     toggleSelect,
     clearSelection,
     toggleTrustee,
+    dismissResult,
     resetToIdle,
   };
 });

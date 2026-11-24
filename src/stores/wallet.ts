@@ -15,12 +15,12 @@ function loadBeans(): Record<string, number> {
       for (const uid of UIDS) {
         const value = parsed[uid];
         if (typeof value === "number" && Number.isFinite(value)) {
-          beans[uid] = Math.round(value);
+          beans[uid] = Math.max(0, Math.round(value));
         }
       }
     }
   } catch {
-    // 读取失败时使用默认金豆
+    // 读取失败时使用默认余额
   }
   return beans;
 }
@@ -37,12 +37,12 @@ export const useWalletStore = defineStore("wallet", () => {
   }
 
   function get(uid: string): number {
-    return beans.value[uid] ?? DEFAULT_BEANS;
+    return Math.max(0, beans.value[uid] ?? DEFAULT_BEANS);
   }
 
   function apply(deltas: Record<string, number>): void {
     for (const [uid, delta] of Object.entries(deltas)) {
-      beans.value[uid] = get(uid) + delta;
+      beans.value[uid] = Math.max(0, get(uid) + delta);
     }
     persist();
   }
@@ -51,7 +51,7 @@ export const useWalletStore = defineStore("wallet", () => {
     for (const uid of UIDS) {
       const value = values[uid];
       if (typeof value === "number" && Number.isFinite(value)) {
-        beans.value[uid] = Math.round(value);
+        beans.value[uid] = Math.max(0, Math.round(value));
       }
     }
     persist();

@@ -2,18 +2,22 @@
   <transition name="modal">
     <div v-if="open" class="overlay" @click.self="$emit('close')">
       <div class="panel glass">
-        <h2 class="panel__title">金豆调整</h2>
+        <h2 class="panel__title">余额调整</h2>
         <p class="panel__hint">修改后立即保存到本地</p>
 
         <div v-for="item in items" :key="item.uid" class="row">
           <span class="row__name">{{ item.name }}</span>
-          <input
-            v-model="values[item.uid]"
-            class="row__input"
-            type="number"
-            inputmode="numeric"
-            step="100"
-          />
+          <div class="row__field">
+            <span class="row__currency">$</span>
+            <input
+              v-model="values[item.uid]"
+              class="row__input"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              step="100"
+            />
+          </div>
         </div>
 
         <div class="panel__actions">
@@ -72,7 +76,7 @@ function save(): void {
     const text = String(raw).trim();
     const num = text === "" ? wallet.get(item.uid) : Number(text);
     next[item.uid] = Number.isFinite(num)
-      ? Math.round(num)
+      ? Math.max(0, Math.round(num))
       : wallet.get(item.uid);
   }
   wallet.setAll(next);
@@ -126,6 +130,18 @@ function save(): void {
   font-size: 14px;
   font-weight: 600;
   color: #fff;
+}
+
+.row__field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.row__currency {
+  font-size: 15px;
+  font-weight: 900;
+  color: #ffd75e;
 }
 
 .row__input {

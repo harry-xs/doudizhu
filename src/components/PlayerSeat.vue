@@ -73,6 +73,14 @@
       </div>
     </div>
 
+    <div
+      v-if="settled"
+      class="seat__delta"
+      :class="{ 'seat__delta--neg': delta < 0 }"
+    >
+      {{ formatDelta(delta) }}
+    </div>
+
     <div class="seat__backs" aria-hidden="true">
       <CardBack
         v-for="n in backCount"
@@ -96,6 +104,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { Player } from "@/game/types";
+import { formatDelta } from "@/game/rooms";
 import CardBack from "./CardBack.vue";
 
 const props = defineProps<{
@@ -103,6 +112,8 @@ const props = defineProps<{
   active: boolean;
   side: "left" | "right";
   landlordConfirmed: boolean;
+  delta: number;
+  settled: boolean;
 }>();
 
 const backCount = computed(() => Math.min(props.player.hand.length, 5));
@@ -262,6 +273,41 @@ function backStyle(n: number) {
   white-space: nowrap;
 }
 
+.seat__delta {
+  position: absolute;
+  top: calc(30px - 0.5em);
+  font-size: clamp(18px, 5.4vw, 28px);
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  color: #ffd75e;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  animation: delta-in 0.25s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+
+.seat--left .seat__delta {
+  left: calc(100% + 8px);
+}
+
+.seat--right .seat__delta {
+  right: calc(100% + 8px);
+}
+
+.seat__delta--neg {
+  color: #ff8b8b;
+}
+
+@keyframes delta-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .seat__tags {
   display: flex;
   flex-wrap: wrap;
@@ -375,6 +421,9 @@ function backStyle(n: number) {
   .seat__name {
     font-size: 10.5px;
   }
+  .seat__delta {
+    top: calc(26px - 0.5em);
+  }
   .seat__badge {
     min-width: 16px;
     height: 16px;
@@ -384,6 +433,12 @@ function backStyle(n: number) {
     top: -9px;
     width: 21px;
     height: 13px;
+  }
+}
+
+@media (max-width: 340px) {
+  .seat__delta {
+    font-size: 16px;
   }
 }
 </style>

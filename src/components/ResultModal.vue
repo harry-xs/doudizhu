@@ -2,6 +2,14 @@
   <transition name="modal">
     <div v-if="show" class="overlay">
       <div class="panel glass" :class="won ? 'panel--win' : 'panel--lose'">
+        <button
+          type="button"
+          class="panel__close"
+          aria-label="关闭"
+          @click="$emit('close')"
+        >
+          ×
+        </button>
         <div class="panel__glow"></div>
         <div class="panel__badge">{{ won ? "胜利" : "失败" }}</div>
         <p class="panel__side">
@@ -23,12 +31,14 @@
           class="panel__gold"
           :class="delta >= 0 ? 'panel__gold--gain' : 'panel__gold--loss'"
         >
-          <span class="panel__gold-label">金豆</span>
+          <span class="panel__gold-label">美元</span>
           <strong class="panel__gold-value">
-            {{ delta >= 0 ? "+" : "" }}{{ delta.toLocaleString("zh-CN") }}
+            {{ delta > 0 ? "+" : delta < 0 ? "-" : "" }}${{
+              Math.abs(delta).toLocaleString("zh-CN")
+            }}
           </strong>
           <span class="panel__gold-total">
-            余额 {{ gold.toLocaleString("zh-CN") }}
+            余额 ${{ gold.toLocaleString("zh-CN") }}
           </span>
         </div>
 
@@ -56,7 +66,11 @@ defineProps<{
   delta: number;
 }>();
 
-defineEmits<{ (e: "restart"): void; (e: "home"): void }>();
+defineEmits<{
+  (e: "restart"): void;
+  (e: "home"): void;
+  (e: "close"): void;
+}>();
 </script>
 
 <style scoped>
@@ -79,6 +93,28 @@ defineEmits<{ (e: "restart"): void; (e: "home"): void }>();
   text-align: center;
   overflow: hidden;
   animation: pop 0.32s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+
+.panel__close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.panel__close:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
 }
 
 .panel__glow {
