@@ -124,7 +124,7 @@
               >
                 <PlayingCard
                   :card="card"
-                  size="xs"
+                  size="sm"
                 />
               </div>
             </div>
@@ -147,7 +147,7 @@
               >
                 <PlayingCard
                   :card="card"
-                  size="xs"
+                  size="sm"
                 />
               </div>
             </div>
@@ -167,7 +167,7 @@
               >
                 <PlayingCard
                   :card="card"
-                  size="xs"
+                  :size="row.placement === 'human' ? 'xs' : 'sm'"
                 />
               </div>
             </div>
@@ -441,8 +441,8 @@ function actionCardStyle(
         ? 28
         : 34
       : width < 560
-        ? 34
-        : 42;
+        ? 46
+        : 56;
   const step =
     count > 1
       ? Math.min(cardWidth * 0.72, (bodyWidth - cardWidth) / (count - 1))
