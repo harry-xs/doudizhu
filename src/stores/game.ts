@@ -5,12 +5,15 @@ import { TYPE_LABEL } from "@/game/types";
 import { dealCards, sortCards } from "@/game/deck";
 import { canBeat, parsePlay } from "@/game/rules";
 import { chooseCall, chooseMove, suggestMoves, type AIPlayerInfo, type MoveContext } from "@/game/ai";
+import { chooseDouZeroMove, preloadDouZero } from "@/game/douzero";
 import type { Move } from "@/game/moves";
 import { playSound } from "@/game/sound";
 import { getRoom, ROOMS, type Room } from "@/game/rooms";
 import { settleBeansWithBankruptcy, springFactor } from "@/game/settlement";
+import type { ClearReason } from "@/game/challenge";
 import { useSettingsStore } from "./settings";
 import { useWalletStore } from "./wallet";
+import { useChallengeStore } from "./challenge";
 
 const AI_NAMES = ["电脑小美", "电脑老王"];
 const DECISION_HOLD = 1200;
@@ -47,6 +50,7 @@ function createPlayers(): Player[] {
 export const useGameStore = defineStore("game", () => {
   const settings = useSettingsStore();
   const wallet = useWalletStore();
+  const challenge = useChallengeStore();
 
   const phase = ref<GamePhase>("idle");
   const players = ref<Player[]>(createPlayers());
@@ -65,8 +69,13 @@ export const useGameStore = defineStore("game", () => {
   const tableActions = ref<Record<string, TableAction>>({});
   const tableDecisions = ref<Record<string, string>>({});
   const resultReady = ref(false);
+  const resultDismissed = ref(false);
+  const springBanner = ref<"spring" | "anti" | null>(null);
   const playedCards = ref<Card[]>([]);
   const playCounts = ref<Record<string, number>>({});
+  const actionSeq = ref<Card[][]>([]);
+  const playedBySeat = ref<Record<string, Card[]>>({});
+  const lastMoveBySeat = ref<Record<string, Card[]>>({});
   const room = ref<Room>(ROOMS[0]);
   const beanDeltas = ref<Record<string, number>>({});
   const tentativeLandlordUid = ref<string | null>(null);
@@ -210,6 +219,7 @@ export const useGameStore = defineStore("game", () => {
       players: order,
       lastPlayerUid: lastPlayerUid.value,
       landlordUid: lord?.uid ?? "",
+      playedCards: playedCards.value,
     };
   }
 
@@ -230,6 +240,8 @@ export const useGameStore = defineStore("game", () => {
     winner.value = null;
     winnerSide.value = null;
     resultReady.value = false;
+    resultDismissed.value = false;
+    springBanner.value = null;
     selectedIds.value = [];
     callActed.value = 0;
     passCount.value = 0;
@@ -237,6 +249,9 @@ export const useGameStore = defineStore("game", () => {
     tableDecisions.value = {};
     playedCards.value = [];
     playCounts.value = {};
+    actionSeq.value = [];
+    playedBySeat.value = {};
+    lastMoveBySeat.value = {};
     beanDeltas.value = {};
     tentativeLandlordUid.value = null;
     robQueue.value = [];
@@ -303,7 +318,7 @@ export const useGameStore = defineStore("game", () => {
       if (!auto) return;
       schedule(() => {
         if (phase.value !== "play") return;
-        aiPlay();
+        void aiPlay();
       }, 900);
     }
   }
@@ -486,8 +501,12 @@ export const useGameStore = defineStore("game", () => {
     tableDecisions.value = {};
     playedCards.value = [];
     playCounts.value = {};
+    actionSeq.value = [];
+    playedBySeat.value = {};
+    lastMoveBySeat.value = {};
     decisionLocked.value = false;
     if (!lord) return;
+    preloadDouZero();
     turnUid.value = lord.uid;
     message.value = `${lord.name} 先出牌`;
     handleTurn();
@@ -498,8 +517,11 @@ export const useGameStore = defineStore("game", () => {
     phase.value = "settle";
     clearTimer();
     resultReady.value = false;
+    resultDismissed.value = false;
+    springBanner.value = null;
 
     const lord = landlord.value;
+    let clearReason: ClearReason | null = null;
     if (lord) {
       const landlordWon = player.isLandlord;
       winnerSide.value = landlordWon ? "landlord" : "farmer";
@@ -514,7 +536,10 @@ export const useGameStore = defineStore("game", () => {
           .filter((p) => !p.isLandlord)
           .map((p) => playCounts.value[p.uid] ?? 0),
       });
-      if (spring > 1) multiple.value *= spring;
+      if (spring > 1) {
+        multiple.value *= spring;
+        springBanner.value = landlordWon ? "spring" : "anti";
+      }
       message.value =
         (landlordWon ? "地主胜利" : "农民胜利") +
         (spring > 1 ? (landlordWon ? "（春天 ×5）" : "（反春 ×5）") : "");
@@ -536,16 +561,34 @@ export const useGameStore = defineStore("game", () => {
           farmerUids,
           landlordWon,
           multiple: multiple.value,
+          deferSubsidy: true,
         });
         beanDeltas.value = result.deltas;
         wallet.setAll(result.balances);
+        const pending = Object.entries(result.subsidies)
+          .filter(([, value]) => value > 0)
+          .map(([uid]) => uid);
+        wallet.addPendingSubsidy(pending);
+        const aiBankrupt = Object.entries(result.subsidies).some(
+          ([uid, value]) => uid !== human.value.uid && value > 0,
+        );
+        clearReason = challenge.evaluate(wallet.get(human.value.uid), aiBankrupt);
       }
     }
 
     // 先展示剩余手牌，动画结束后再弹出结算弹窗
-    schedule(() => {
+    const finishSettle = (): void => {
       resultReady.value = true;
-    }, settings.animation ? 3600 : 1200);
+      if (clearReason) challenge.openCelebration();
+    };
+    if (springBanner.value) {
+      schedule(() => {
+        springBanner.value = null;
+        schedule(finishSettle, settings.animation ? 1400 : 700);
+      }, 1600);
+    } else {
+      schedule(finishSettle, settings.animation ? 3600 : 1200);
+    }
     return true;
   }
 
@@ -560,7 +603,17 @@ export const useGameStore = defineStore("game", () => {
       ...playCounts.value,
       [player.uid]: (playCounts.value[player.uid] ?? 0) + 1,
     };
-    lastPlay.value = sortCards(cards);
+    const sortedPlay = sortCards(cards);
+    actionSeq.value = [...actionSeq.value, sortedPlay];
+    playedBySeat.value = {
+      ...playedBySeat.value,
+      [player.uid]: [...(playedBySeat.value[player.uid] ?? []), ...cards],
+    };
+    lastMoveBySeat.value = {
+      ...lastMoveBySeat.value,
+      [player.uid]: sortedPlay,
+    };
+    lastPlay.value = sortedPlay;
     lastPlayerUid.value = player.uid;
     passCount.value = 0;
     if (player.uid === human.value.uid) selectedIds.value = [];
@@ -624,6 +677,11 @@ export const useGameStore = defineStore("game", () => {
     tableActions.value = {
       ...tableActions.value,
       [player.uid]: { kind: "pass", cards: [], info: null },
+    };
+    actionSeq.value = [...actionSeq.value, []];
+    lastMoveBySeat.value = {
+      ...lastMoveBySeat.value,
+      [player.uid]: [],
     };
     advanceTurn();
 
@@ -704,16 +762,55 @@ export const useGameStore = defineStore("game", () => {
     sound("select");
   }
 
-  function aiPlay(): void {
+  async function aiPlay(): Promise<void> {
     if (phase.value !== "play") return;
     const player = currentPlayer.value;
     if (!player) return;
-    const auto = player.isRobot || (player.uid === human.value.uid && player.isTrustee);
+    const auto =
+      player.isRobot ||
+      (player.uid === human.value.uid && player.isTrustee);
     if (!auto) return;
 
+    const token = gameToken;
     const lastInfo = lastPlayInfo.value;
-    const move = chooseMove(player.hand, lastInfo, buildAIContext(player.uid));
+    const canPass =
+      !!lastInfo && lastPlayerUid.value !== player.uid;
 
+    const choice = await chooseDouZeroMove({
+      myUid: player.uid,
+      players: players.value.map((p) => ({
+        uid: p.uid,
+        isLandlord: p.isLandlord,
+        handCount: p.hand.length,
+      })),
+      myHand: player.hand,
+      landlordUid: landlord.value?.uid ?? "",
+      playedCards: playedCards.value,
+      playedBySeat: playedBySeat.value,
+      lastMoveBySeat: lastMoveBySeat.value,
+      actionSeq: actionSeq.value,
+      last: lastInfo,
+      canPass,
+    });
+
+    if (
+      token !== gameToken ||
+      phase.value !== "play" ||
+      turnUid.value !== player.uid
+    ) {
+      return;
+    }
+
+    if (choice?.kind === "move") {
+      commitPlay(player, choice.move.cards, choice.move.info);
+      return;
+    }
+    if (choice?.kind === "pass" && canPass) {
+      passTurn(player);
+      return;
+    }
+
+    const move = chooseMove(player.hand, lastInfo, buildAIContext(player.uid));
     if (move) {
       commitPlay(player, move.cards, move.info);
       return;
@@ -762,6 +859,20 @@ export const useGameStore = defineStore("game", () => {
 
   function dismissResult(): void {
     resultReady.value = false;
+    resultDismissed.value = true;
+  }
+
+  function reopenResult(): void {
+    resultReady.value = true;
+    resultDismissed.value = false;
+  }
+
+  function resetAll(): void {
+    round.value = 0;
+    room.value = ROOMS[0];
+    resultReady.value = false;
+    resultDismissed.value = false;
+    resetToIdle();
   }
 
   function resetToIdle(): void {
@@ -776,6 +887,8 @@ export const useGameStore = defineStore("game", () => {
     winner.value = null;
     winnerSide.value = null;
     resultReady.value = false;
+    resultDismissed.value = false;
+    springBanner.value = null;
     selectedIds.value = [];
     message.value = "";
     turnUid.value = "";
@@ -784,6 +897,9 @@ export const useGameStore = defineStore("game", () => {
     tableDecisions.value = {};
     playedCards.value = [];
     playCounts.value = {};
+    actionSeq.value = [];
+    playedBySeat.value = {};
+    lastMoveBySeat.value = {};
     beanDeltas.value = {};
     tentativeLandlordUid.value = null;
     robQueue.value = [];
@@ -807,9 +923,14 @@ export const useGameStore = defineStore("game", () => {
     round,
     winnerSide,
     resultReady,
+    resultDismissed,
+    springBanner,
     tableActions,
     tableDecisions,
     playedCards,
+    actionSeq,
+    playedBySeat,
+    lastMoveBySeat,
     room,
     beanDeltas,
     human,
@@ -840,6 +961,8 @@ export const useGameStore = defineStore("game", () => {
     clearSelection,
     toggleTrustee,
     dismissResult,
+    reopenResult,
+    resetAll,
     resetToIdle,
   };
 });

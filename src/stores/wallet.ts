@@ -1,13 +1,20 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { DEFAULT_BEANS } from "@/game/rooms";
+import { BANKRUPT_SUBSIDY, INITIAL_BEANS } from "@/game/rooms";
 
-const STORAGE_KEY = "doudizhu-gold-v1";
+const STORAGE_KEY = "doudizhu-gold-v2";
+const LEGACY_KEY = "doudizhu-gold-v1";
+const PENDING_KEY = "doudizhu-subsidy-v1";
 const UIDS = ["p0", "p1", "p2"];
 
-function loadBeans(): Record<string, number> {
+function initialBeans(): Record<string, number> {
   const beans: Record<string, number> = {};
-  for (const uid of UIDS) beans[uid] = DEFAULT_BEANS;
+  for (const uid of UIDS) beans[uid] = INITIAL_BEANS[uid] ?? 0;
+  return beans;
+}
+
+function loadBeans(): Record<string, number> {
+  const beans = initialBeans();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -25,8 +32,27 @@ function loadBeans(): Record<string, number> {
   return beans;
 }
 
+function loadPending(): string[] {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (uid): uid is string =>
+            typeof uid === "string" && UIDS.includes(uid),
+        );
+      }
+    }
+  } catch {
+    // 读取失败时忽略破产补助
+  }
+  return [];
+}
+
 export const useWalletStore = defineStore("wallet", () => {
   const beans = ref<Record<string, number>>(loadBeans());
+  const pendingSubsidy = ref<string[]>(loadPending());
 
   function persist(): void {
     try {
@@ -36,8 +62,23 @@ export const useWalletStore = defineStore("wallet", () => {
     }
   }
 
+  function persistPending(): void {
+    try {
+      if (pendingSubsidy.value.length > 0) {
+        localStorage.setItem(
+          PENDING_KEY,
+          JSON.stringify(pendingSubsidy.value),
+        );
+      } else {
+        localStorage.removeItem(PENDING_KEY);
+      }
+    } catch {
+      // localStorage 不可用时静默降级
+    }
+  }
+
   function get(uid: string): number {
-    return Math.max(0, beans.value[uid] ?? DEFAULT_BEANS);
+    return Math.max(0, beans.value[uid] ?? INITIAL_BEANS[uid] ?? 0);
   }
 
   function apply(deltas: Record<string, number>): void {
@@ -57,12 +98,58 @@ export const useWalletStore = defineStore("wallet", () => {
     persist();
   }
 
+  function addPendingSubsidy(uids: string[]): void {
+    if (uids.length === 0) return;
+    const next = new Set(pendingSubsidy.value);
+    for (const uid of uids) {
+      if (UIDS.includes(uid)) next.add(uid);
+    }
+    pendingSubsidy.value = [...next];
+    persistPending();
+  }
+
+  function hasPendingSubsidy(): boolean {
+    return pendingSubsidy.value.length > 0;
+  }
+
+  function applyPendingSubsidy(): string[] {
+    const applied = [...pendingSubsidy.value];
+    for (const uid of applied) {
+      beans.value[uid] = get(uid) + BANKRUPT_SUBSIDY;
+    }
+    pendingSubsidy.value = [];
+    persist();
+    persistPending();
+    return applied;
+  }
+
+  function clearPendingSubsidy(): void {
+    pendingSubsidy.value = [];
+    persistPending();
+  }
+
   function reset(): void {
-    const next: Record<string, number> = {};
-    for (const uid of UIDS) next[uid] = DEFAULT_BEANS;
-    beans.value = next;
+    beans.value = initialBeans();
+    pendingSubsidy.value = [];
+    try {
+      localStorage.removeItem(LEGACY_KEY);
+      localStorage.removeItem(PENDING_KEY);
+    } catch {
+      // 忽略
+    }
     persist();
   }
 
-  return { beans, get, apply, setAll, reset };
+  return {
+    beans,
+    pendingSubsidy,
+    get,
+    apply,
+    setAll,
+    addPendingSubsidy,
+    hasPendingSubsidy,
+    applyPendingSubsidy,
+    clearPendingSubsidy,
+    reset,
+  };
 });

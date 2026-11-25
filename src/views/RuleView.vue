@@ -46,10 +46,29 @@
       <section class="card glass">
         <h2 class="card__title">美元规则</h2>
         <ul class="points">
-          <li>每人初始余额 $10000（$1w）；场次为 ×1 / ×10 / ×50 / ×500，入场门槛分别为 $0 / $5w / $25w / $250w。</li>
-          <li>结算按「底注 $100 × 本局倍数」，地主输赢为农民的两倍；赢家只能获得对手实际能支付的余额。</li>
+          <li>场次为 ×1 / ×10 / ×50 / ×500，入场门槛分别为 $0 / $5万 / $25万 / $250万。</li>
+          <li>结算按「底注 $120 × 本局倍数」，地主输赢为农民的两倍；赢家只能获得对手实际能支付的余额。</li>
           <li>余额不能为负数，支付上限为当前余额；结算后余额为 $0 的玩家获得 $10000 补助。</li>
         </ul>
+      </section>
+
+      <section class="card glass">
+        <h2 class="card__title">通关规则</h2>
+        <ul class="points">
+          <li>初始余额：我方 $1万，电脑小美 $5120万，电脑老王 $4870万。</li>
+          <li>我方余额达到 $1亿，或任意人机破产，即视为通关，并触发通关庆祝动画。</li>
+          <li>通关记录保存在本地，重置后可重新挑战。</li>
+        </ul>
+      </section>
+
+      <section class="card glass">
+        <h2 class="card__title">重置</h2>
+        <ul class="points">
+          <li>重置余额、设置与通关记录，所有内容恢复初始状态。</li>
+        </ul>
+        <button type="button" class="btn btn-danger reset-btn" @click="resetAll">
+          重置所有内容
+        </button>
       </section>
     </main>
   </div>
@@ -57,8 +76,31 @@
 
 <script setup lang="ts">
 import { useRouter } from "vue-router";
+import { useWalletStore } from "@/stores/wallet";
+import { useSettingsStore } from "@/stores/settings";
+import { useChallengeStore } from "@/stores/challenge";
+import { useGameStore } from "@/stores/game";
 
 const router = useRouter();
+const wallet = useWalletStore();
+const settings = useSettingsStore();
+const challenge = useChallengeStore();
+const game = useGameStore();
+
+function resetAll(): void {
+  if (
+    !window.confirm(
+      "确定要重置所有内容吗？余额、设置和通关记录都会恢复初始状态。",
+    )
+  ) {
+    return;
+  }
+  wallet.reset();
+  settings.reset();
+  challenge.reset();
+  game.resetAll();
+  void router.push("/");
+}
 
 const patterns = [
   { name: "单张", example: "3", desc: "任意一张牌" },
@@ -216,5 +258,12 @@ const patterns = [
   font-size: 12px;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.6);
+}
+
+.reset-btn {
+  width: 100%;
+  height: 46px;
+  margin-top: 12px;
+  font-size: 15px;
 }
 </style>

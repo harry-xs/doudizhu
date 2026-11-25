@@ -45,6 +45,7 @@ export interface BankruptcySettlementInput {
   multiple: number;
   base?: number;
   subsidy?: number;
+  deferSubsidy?: boolean;
 }
 
 export interface BankruptcySettlementResult {
@@ -100,7 +101,7 @@ export function settleBeansWithBankruptcy(
   for (const uid of uids) {
     const after = Math.max(0, start[uid] + deltas[uid]);
     subsidies[uid] = after <= 0 ? subsidy : 0;
-    balances[uid] = after + subsidies[uid];
+    balances[uid] = after + (input.deferSubsidy ? 0 : subsidies[uid]);
   }
 
   return { stake, deltas, subsidies, balances };

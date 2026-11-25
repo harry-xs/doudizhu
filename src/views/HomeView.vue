@@ -69,6 +69,11 @@
       :open="goldAdminOpen"
       @close="goldAdminOpen = false"
     />
+    <BankruptcyModal
+      :open="subsidyOpen"
+      @confirm="confirmSubsidy"
+      @close="closeSubsidy"
+    />
   </div>
 </template>
 
@@ -80,6 +85,7 @@ import { ROOMS, formatBeans } from "@/game/rooms";
 import PlayingCard from "@/components/PlayingCard.vue";
 import SettingsPanel from "@/components/SettingsPanel.vue";
 import GoldAdminModal from "@/components/GoldAdminModal.vue";
+import BankruptcyModal from "@/components/BankruptcyModal.vue";
 import { useGameStore } from "@/stores/game";
 import { useWalletStore } from "@/stores/wallet";
 import { playSound } from "@/game/sound";
@@ -91,6 +97,8 @@ const wallet = useWalletStore();
 const settings = useSettingsStore();
 const settingsOpen = ref(false);
 const goldAdminOpen = ref(false);
+const subsidyOpen = ref(false);
+const pendingRoomId = ref<string | null>(null);
 const beans = computed(() => wallet.get("p0"));
 
 let walletClicks = 0;
@@ -124,9 +132,33 @@ const demoCards: Card[] = [
 function startGame(roomId: string): void {
   const room = ROOMS.find((item) => item.id === roomId);
   if (!room || beans.value < room.minBeans) return;
+  if (wallet.hasPendingSubsidy()) {
+    pendingRoomId.value = roomId;
+    subsidyOpen.value = true;
+    return;
+  }
+  launchGame(roomId);
+}
+
+function launchGame(roomId: string): void {
+  const room = ROOMS.find((item) => item.id === roomId);
+  if (!room || wallet.get("p0") < room.minBeans) return;
   playSound("button", settings.sound);
   game.newGame(roomId);
   void router.push("/game");
+}
+
+function confirmSubsidy(): void {
+  wallet.applyPendingSubsidy();
+  subsidyOpen.value = false;
+  const roomId = pendingRoomId.value;
+  pendingRoomId.value = null;
+  if (roomId) launchGame(roomId);
+}
+
+function closeSubsidy(): void {
+  subsidyOpen.value = false;
+  pendingRoomId.value = null;
 }
 </script>
 

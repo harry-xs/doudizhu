@@ -12,6 +12,7 @@ export interface MoveContext {
   players: AIPlayerInfo[];
   lastPlayerUid: string | null;
   landlordUid: string;
+  playedCards?: Card[];
 }
 
 export interface HandEstimate {
@@ -40,6 +41,72 @@ function countsOf(cards: Card[]): number[] {
   const counts = new Array<number>(18).fill(0);
   for (const card of cards) counts[card.rank]++;
   return counts;
+}
+
+// 记牌：统计对手可能持有的牌，参考 DouZero/RLCard 的卡牌计数与控制思路。
+function unseenCounts(hand: Card[], played: Card[]): number[] {
+  const counts = new Array<number>(18).fill(0);
+  for (let rank = 3; rank <= 15; rank++) counts[rank] = 4;
+  counts[16] = 1;
+  counts[17] = 1;
+  for (const card of hand) counts[card.rank]--;
+  for (const card of played) counts[card.rank]--;
+  for (let rank = 3; rank <= 17; rank++) {
+    counts[rank] = Math.max(0, counts[rank]);
+  }
+  return counts;
+}
+
+function hasRocket(counts: number[]): boolean {
+  return counts[16] > 0 && counts[17] > 0;
+}
+
+function hasBomb(counts: number[]): boolean {
+  for (let rank = 3; rank <= 15; rank++) {
+    if (counts[rank] >= 4) return true;
+  }
+  return hasRocket(counts);
+}
+
+function isUnbeatable(move: Move, unseen: number[]): boolean {
+  const type = move.info.type;
+  if (type === "kingBomb") return true;
+
+  if (type === "bomb") {
+    if (hasRocket(unseen)) return false;
+    for (let rank = move.info.rank + 1; rank <= 15; rank++) {
+      if (unseen[rank] >= 4) return false;
+    }
+    return true;
+  }
+
+  if (hasBomb(unseen)) return false;
+
+  if (type === "single") {
+    for (let rank = move.info.rank + 1; rank <= 17; rank++) {
+      if (unseen[rank] >= 1) return false;
+    }
+    return true;
+  }
+  if (type === "pair") {
+    for (let rank = move.info.rank + 1; rank <= 15; rank++) {
+      if (unseen[rank] >= 2) return false;
+    }
+    return true;
+  }
+  if (type === "triple") {
+    for (let rank = move.info.rank + 1; rank <= 15; rank++) {
+      if (unseen[rank] >= 3) return false;
+    }
+    return true;
+  }
+  if (type === "tripleWithOne" || type === "tripleWithTwo") {
+    for (let rank = move.info.rank + 1; rank <= 15; rank++) {
+      if (unseen[rank] >= 3) return false;
+    }
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -286,7 +353,12 @@ function pickBest(
   return best;
 }
 
-function leadScore(hand: Card[], move: Move, ctx: SeatContext): number {
+function leadScore(
+  hand: Card[],
+  move: Move,
+  ctx: SeatContext,
+  unseen: number[] | null,
+): number {
   let score = baseScore(hand, move);
   const type = move.info.type;
   const isSingle = type === "single";
@@ -325,6 +397,15 @@ function leadScore(hand: Card[], move: Move, ctx: SeatContext): number {
     }
   }
 
+  if (
+    !ctx.isFarmer &&
+    !isBombMove(move) &&
+    unseen &&
+    isUnbeatable(move, unseen)
+  ) {
+    score -= 25;
+  }
+
   return score;
 }
 
@@ -334,6 +415,9 @@ export function chooseMove(
   context: MoveContext,
 ): Move | null {
   const ctx = analyzeContext(context);
+  const unseen = context.playedCards
+    ? unseenCounts(hand, context.playedCards)
+    : null;
 
   if (last) {
     const moves = generateBeatingMoves(hand, last);
@@ -485,7 +569,7 @@ export function chooseMove(
     }
   }
 
-  return pickBest(pool, (move) => leadScore(hand, move, ctx));
+  return pickBest(pool, (move) => leadScore(hand, move, ctx, unseen));
 }
 
 /**
@@ -498,21 +582,31 @@ export function suggestMoves(
   context: MoveContext,
 ): Move[] {
   const ctx = analyzeContext(context);
+  const unseen = context.playedCards
+    ? unseenCounts(hand, context.playedCards)
+    : null;
 
   if (last) {
     const moves = generateBeatingMoves(hand, last);
     const normal = moves.filter((m) => !isBombMove(m));
     const bombs = moves.filter((m) => isBombMove(m));
-    normal.sort((a, b) => baseScore(hand, a) - baseScore(hand, b));
-    bombs.sort((a, b) => baseScore(hand, a) - baseScore(hand, b));
+    const responseScore = (move: Move): number =>
+      baseScore(hand, move) +
+      (unseen && isUnbeatable(move, unseen) ? -10 : 0);
+    normal.sort((a, b) => responseScore(a) - responseScore(b));
+    bombs.sort((a, b) => responseScore(a) - responseScore(b));
     return [...normal, ...bombs];
   }
 
   const moves = generateAllMoves(hand);
   const normal = moves.filter((m) => !isBombMove(m));
   const bombs = moves.filter((m) => isBombMove(m));
-  normal.sort((a, b) => leadScore(hand, a, ctx) - leadScore(hand, b, ctx));
-  bombs.sort((a, b) => leadScore(hand, a, ctx) - leadScore(hand, b, ctx));
+  normal.sort(
+    (a, b) => leadScore(hand, a, ctx, unseen) - leadScore(hand, b, ctx, unseen),
+  );
+  bombs.sort(
+    (a, b) => leadScore(hand, a, ctx, unseen) - leadScore(hand, b, ctx, unseen),
+  );
   return [...normal, ...bombs];
 }
 

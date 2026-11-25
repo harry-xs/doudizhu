@@ -5,8 +5,13 @@ export interface Room {
   minBeans: number;
 }
 
-export const DEFAULT_BEANS = 10000;
-export const BEAN_BASE = 100;
+export const INITIAL_BEANS: Record<string, number> = {
+  p0: 10000,
+  p1: 51200000,
+  p2: 48700000,
+};
+export const CLEAR_TARGET = 100000000;
+export const BEAN_BASE = 120;
 export const BANKRUPT_SUBSIDY = 10000;
 
 export const ROOMS: Room[] = [
@@ -20,11 +25,23 @@ export function getRoom(id: string | null | undefined): Room {
   return ROOMS.find((room) => room.id === id) ?? ROOMS[0];
 }
 
+function compact(value: number): string {
+  return value.toFixed(2).replace(/\.?0+$/, "");
+}
+
 export function formatBeans(value: number): string {
   const rounded = Math.round(value);
-  if (Math.abs(rounded) < 10000) return rounded.toLocaleString("zh-CN");
-  const wan = rounded / 10000;
-  return `${wan.toFixed(2).replace(/\.?0+$/, "")}w`;
+  const abs = Math.abs(rounded);
+  if (abs >= 1000000000000) {
+    return `${compact(rounded / 1000000000000)}万亿`;
+  }
+  if (abs >= 100000000) {
+    return `${compact(rounded / 100000000)}亿`;
+  }
+  if (abs >= 10000) {
+    return `${compact(rounded / 10000)}万`;
+  }
+  return rounded.toLocaleString("zh-CN");
 }
 
 export function formatDelta(value: number): string {

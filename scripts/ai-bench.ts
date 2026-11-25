@@ -37,6 +37,7 @@ function playGame(
   let lastOwner: (typeof players)[number] | null = null;
   let passes = 0;
   const plays = [0, 0, 0];
+  const played: Card[] = [];
 
   for (let step = 0; step < 500; step++) {
     const player = players[turn];
@@ -50,6 +51,7 @@ function playGame(
       players: order,
       lastPlayerUid: lastOwner?.uid ?? null,
       landlordUid: "p0",
+      playedCards: played,
     };
     const ai = player.isLandlord ? landlordAI : farmerAI;
     const move = ai(player.hand, last, context);
@@ -62,6 +64,7 @@ function playGame(
       }
       const remove = new Set(move.cards.map((c) => c.id));
       player.hand = player.hand.filter((c) => !remove.has(c.id));
+      played.push(...move.cards);
       last = info;
       lastOwner = player;
       passes = 0;

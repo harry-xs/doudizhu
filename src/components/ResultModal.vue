@@ -33,12 +33,10 @@
         >
           <span class="panel__gold-label">美元</span>
           <strong class="panel__gold-value">
-            {{ delta > 0 ? "+" : delta < 0 ? "-" : "" }}${{
-              Math.abs(delta).toLocaleString("zh-CN")
-            }}
+            {{ formatDelta(delta) }}
           </strong>
           <span class="panel__gold-total">
-            余额 ${{ gold.toLocaleString("zh-CN") }}
+            余额 ${{ formatBeans(gold) }}
           </span>
         </div>
 
@@ -56,6 +54,8 @@
 </template>
 
 <script setup lang="ts">
+import { formatBeans, formatDelta } from "@/game/rooms";
+
 defineProps<{
   show: boolean;
   won: boolean;

@@ -57,6 +57,13 @@ export const useSettingsStore = defineStore("settings", () => {
     persist();
   }
 
+  function reset(): void {
+    sound.value = true;
+    animation.value = true;
+    counter.value = true;
+    persist();
+  }
+
   return {
     sound,
     animation,
@@ -64,5 +71,6 @@ export const useSettingsStore = defineStore("settings", () => {
     toggleSound,
     toggleAnimation,
     toggleCounter,
+    reset,
   };
 });

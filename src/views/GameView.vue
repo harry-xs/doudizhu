@@ -296,46 +296,67 @@
         </template>
 
         <template v-else-if="game.phase === 'settle'">
-          <div class="waiting">本局结束，正在亮牌…</div>
-        </template>
-
-        <template v-else>
-          <button
-            type="button"
-            class="btn btn-ghost action action--trustee"
-            :class="{ 'action--on': game.human.isTrustee }"
-            @click="game.toggleTrustee()"
-          >
-            {{ game.human.isTrustee ? "取消托管" : "托管" }}
-          </button>
-
-          <template v-if="game.isHumanTurn && !game.humanAuto">
-            <button
-              type="button"
-              class="btn btn-ghost action action--hint"
-              :disabled="!canSelect"
-              @click="game.humanHint()"
-            >
-              提 示
-            </button>
-            <button
-              type="button"
-              class="btn btn-ghost action"
-              :disabled="!game.canPass"
-              @click="game.humanPass()"
-            >
-              {{ passLabel }}
-            </button>
+          <template v-if="game.resultDismissed">
             <button
               type="button"
               class="btn btn-gold action action--wide"
-              :disabled="!canPlay"
-              @click="game.humanPlay()"
+              @click="game.reopenResult()"
             >
-              出 牌
+              查看结算
             </button>
           </template>
-          <div v-else class="waiting">{{ game.actionHint }}</div>
+          <div v-else class="waiting">本局结束，正在亮牌…</div>
+        </template>
+
+        <template v-else>
+          <template v-if="humanCannotBeat">
+            <button
+              type="button"
+              class="btn btn-ghost action action--pass action--cant"
+              @click="game.humanPass()"
+            >
+              要不起
+            </button>
+          </template>
+
+          <template v-else>
+            <button
+              type="button"
+              class="btn btn-ghost action action--trustee"
+              :class="{ 'action--on': game.human.isTrustee }"
+              @click="game.toggleTrustee()"
+            >
+              {{ game.human.isTrustee ? "取消托管" : "托管" }}
+            </button>
+
+            <template v-if="game.isHumanTurn && !game.humanAuto">
+              <button
+                type="button"
+                class="btn btn-ghost action action--hint"
+                :disabled="!canSelect"
+                @click="game.humanHint()"
+              >
+                提 示
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost action action--pass"
+                :disabled="!game.canPass"
+                @click="game.humanPass()"
+              >
+                {{ passLabel }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-gold action action--wide"
+                :disabled="!canPlay"
+                @click="game.humanPlay()"
+              >
+                出 牌
+              </button>
+            </template>
+            <div v-else class="waiting">{{ game.actionHint }}</div>
+          </template>
         </template>
       </div>
     </footer>
@@ -354,6 +375,13 @@
     />
 
     <SettingsPanel :open="settingsOpen" @close="settingsOpen = false" />
+    <BankruptcyModal
+      :open="subsidyOpen"
+      @confirm="confirmSubsidy"
+      @close="closeSubsidy"
+    />
+    <SpringBanner :kind="game.springBanner" />
+    <ClearCelebration />
   </div>
 </template>
 <script setup lang="ts">
@@ -373,6 +401,9 @@ import PlayerSeat from "@/components/PlayerSeat.vue";
 import ResultModal from "@/components/ResultModal.vue";
 import SettingsPanel from "@/components/SettingsPanel.vue";
 import CardCounter from "@/components/CardCounter.vue";
+import ClearCelebration from "@/components/ClearCelebration.vue";
+import SpringBanner from "@/components/SpringBanner.vue";
+import BankruptcyModal from "@/components/BankruptcyModal.vue";
 
 const router = useRouter();
 const game = useGameStore();
@@ -380,6 +411,7 @@ const settings = useSettingsStore();
 const wallet = useWalletStore();
 
 const settingsOpen = ref(false);
+const subsidyOpen = ref(false);
 const shaking = ref(false);
 const handEl = ref<HTMLElement | null>(null);
 const handWidth = ref(360);
@@ -728,6 +760,15 @@ const hasBeatingMove = computed(() => {
   return generateBeatingMoves(game.human.hand, last).length > 0;
 });
 
+const humanCannotBeat = computed(
+  () =>
+    game.isHumanTurn &&
+    !game.humanAuto &&
+    !!game.lastPlayInfo &&
+    game.lastPlayerUid !== game.human.uid &&
+    !hasBeatingMove.value,
+);
+
 const passLabel = computed(() => {
   const last = game.lastPlayInfo;
   if (!last || game.lastPlayerUid === game.human.uid) return "不 出";
@@ -744,7 +785,25 @@ function goHome(): void {
 }
 
 function restart(): void {
+  if (wallet.hasPendingSubsidy()) {
+    subsidyOpen.value = true;
+    return;
+  }
   game.newGame();
+}
+
+function confirmSubsidy(): void {
+  wallet.applyPendingSubsidy();
+  subsidyOpen.value = false;
+  if (wallet.get(game.human.uid) < game.room.minBeans) {
+    goHome();
+    return;
+  }
+  game.newGame();
+}
+
+function closeSubsidy(): void {
+  subsidyOpen.value = false;
 }
 
 onMounted(() => {
@@ -1616,6 +1675,21 @@ onBeforeUnmount(() => {
 .action--hint {
   min-width: 58px;
   padding: 0 8px;
+  color: #bfe0ff;
+  border-color: rgba(96, 165, 250, 0.45);
+  background: rgba(96, 165, 250, 0.15);
+}
+
+.action--pass {
+  color: #ffd3cf;
+  border-color: rgba(255, 150, 140, 0.45);
+  background: rgba(170, 52, 44, 0.2);
+}
+
+.action--cant {
+  min-width: 120px;
+  letter-spacing: 0.12em;
+  font-weight: 800;
 }
 
 .action--trustee {
