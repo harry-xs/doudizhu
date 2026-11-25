@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { BANKRUPT_SUBSIDY, INITIAL_BEANS } from "@/game/rooms";
 
 const STORAGE_KEY = "doudizhu-gold-v2";
@@ -81,11 +81,22 @@ export const useWalletStore = defineStore("wallet", () => {
     return Math.max(0, beans.value[uid] ?? INITIAL_BEANS[uid] ?? 0);
   }
 
+  const activePendingSubsidy = computed(() =>
+    pendingSubsidy.value.filter((uid) => get(uid) <= 0),
+  );
+
+  function prunePendingSubsidy(): void {
+    if (activePendingSubsidy.value.length === pendingSubsidy.value.length) return;
+    pendingSubsidy.value = [...activePendingSubsidy.value];
+    persistPending();
+  }
+
   function apply(deltas: Record<string, number>): void {
     for (const [uid, delta] of Object.entries(deltas)) {
       beans.value[uid] = Math.max(0, get(uid) + delta);
     }
     persist();
+    prunePendingSubsidy();
   }
 
   function setAll(values: Record<string, number>): void {
@@ -96,6 +107,7 @@ export const useWalletStore = defineStore("wallet", () => {
       }
     }
     persist();
+    prunePendingSubsidy();
   }
 
   function addPendingSubsidy(uids: string[]): void {
@@ -109,11 +121,11 @@ export const useWalletStore = defineStore("wallet", () => {
   }
 
   function hasPendingSubsidy(): boolean {
-    return pendingSubsidy.value.length > 0;
+    return activePendingSubsidy.value.length > 0;
   }
 
   function applyPendingSubsidy(): string[] {
-    const applied = [...pendingSubsidy.value];
+    const applied = [...activePendingSubsidy.value];
     for (const uid of applied) {
       beans.value[uid] = get(uid) + BANKRUPT_SUBSIDY;
     }
@@ -143,6 +155,7 @@ export const useWalletStore = defineStore("wallet", () => {
   return {
     beans,
     pendingSubsidy,
+    activePendingSubsidy,
     get,
     apply,
     setAll,

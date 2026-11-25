@@ -43,7 +43,7 @@ defineProps<{ open: boolean }>();
 defineEmits<{ (e: "confirm"): void; (e: "close"): void }>();
 
 const wallet = useWalletStore();
-const pending = computed(() => wallet.pendingSubsidy);
+const pending = computed(() => wallet.activePendingSubsidy);
 
 const NAMES: Record<string, string> = {
   p0: "我",
