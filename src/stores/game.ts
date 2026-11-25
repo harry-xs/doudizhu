@@ -319,7 +319,7 @@ export const useGameStore = defineStore("game", () => {
       schedule(() => {
         if (phase.value !== "play") return;
         void aiPlay();
-      }, 900);
+      }, 500);
     }
   }
 

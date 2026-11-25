@@ -45,7 +45,9 @@ const MODEL_FILES: Record<DouZeroRole, string> = {
   landlord_down: "landlord_down.onnx",
 };
 
-const sessions = new Map<DouZeroRole, Promise<ort.InferenceSession>>();
+const sessions = new Map<DouZeroRole, ort.InferenceSession>();
+const loading = new Map<DouZeroRole, Promise<void>>();
+const failedAt = new Map<DouZeroRole, number>();
 let wasmConfigured = false;
 let warned = false;
 
@@ -61,27 +63,42 @@ function modelUrl(role: DouZeroRole): string | null {
   return new URL(`models/douzero_wp/${MODEL_FILES[role]}`, TARGET_BASE).href;
 }
 
-function getSession(role: DouZeroRole): Promise<ort.InferenceSession> {
-  const existing = sessions.get(role);
-  if (existing) return existing;
+function ensureSession(role: DouZeroRole): void {
+  if (sessions.has(role) || loading.has(role)) return;
+  if (Date.now() - (failedAt.get(role) ?? 0) < 60000) return;
   configureWasm();
   const url = modelUrl(role);
-  if (!url) return Promise.reject(new Error("DouZero model base unavailable"));
-  const loading = ort.InferenceSession.create(url, {
+  if (!url) return;
+  const task = ort.InferenceSession.create(url, {
     executionProviders: ["wasm"],
-  }).catch((error) => {
-    sessions.delete(role);
-    throw error;
-  });
-  sessions.set(role, loading);
-  return loading;
+  })
+    .then((session) => {
+      sessions.set(role, session);
+      failedAt.delete(role);
+    })
+    .catch((error) => {
+      failedAt.set(role, Date.now());
+      if (!warned) {
+        warned = true;
+        console.warn("DouZero model load failed, using heuristic AI", error);
+      }
+    })
+    .finally(() => {
+      loading.delete(role);
+    });
+  loading.set(role, task);
+}
+
+function readySession(role: DouZeroRole): ort.InferenceSession | null {
+  ensureSession(role);
+  return sessions.get(role) ?? null;
 }
 
 export function preloadDouZero(): void {
   if (typeof window === "undefined" || !TARGET_BASE) return;
-  void getSession("landlord").catch(() => undefined);
-  void getSession("landlord_up").catch(() => undefined);
-  void getSession("landlord_down").catch(() => undefined);
+  ensureSession("landlord");
+  ensureSession("landlord_up");
+  ensureSession("landlord_down");
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -382,13 +399,15 @@ export async function chooseDouZeroMove(
   const zBatch = new Float32Array(n * z.length);
   for (let i = 0; i < n; i++) zBatch.set(z, i * z.length);
 
+  const session = readySession(role);
+  if (!session) return null;
+
   try {
-    const session = await withTimeout(getSession(role), 8000);
     const feeds: Record<string, ort.Tensor> = {
       z: new ort.Tensor("float32", zBatch, [n, 5, 162]),
       x: new ort.Tensor("float32", x, [n, role === "landlord" ? 373 : 484]),
     };
-    const output = await withTimeout(session.run(feeds), 8000);
+    const output = await withTimeout(session.run(feeds), 5000);
     const first = Object.values(output)[0] as ort.Tensor;
     const data = first?.data as Float32Array | undefined;
     if (!data || data.length < n) return null;
