@@ -245,7 +245,11 @@ export function estimateHand(cards: Card[]): HandEstimate {
 }
 
 function isBombMove(move: Move): boolean {
-  return move.info.type === "bomb" || move.info.type === "kingBomb";
+  return (
+    move.info.type === "bomb" ||
+    move.info.type === "bombStraight" ||
+    move.info.type === "kingBomb"
+  );
 }
 
 function removeMoveCards(hand: Card[], move: Move): Card[] {

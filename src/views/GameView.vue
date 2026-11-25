@@ -107,7 +107,7 @@
               v-else-if="row.action && row.action.kind === 'play' && row.action.info"
               class="action-zone__type"
             >
-              {{ TYPE_LABEL[row.action.info.type] }}
+              {{ playTypeLabel(row.action.info) }}
             </span>
           </div>
 
@@ -381,6 +381,10 @@
       @close="closeSubsidy"
     />
     <SpringBanner :kind="game.springBanner" />
+    <BombBanner
+      :kind="game.bombBanner?.kind ?? null"
+      :length="game.bombBanner?.length ?? 0"
+    />
     <ClearCelebration />
   </div>
 </template>
@@ -393,7 +397,7 @@ import { useWalletStore } from "@/stores/wallet";
 import { BEAN_BASE, formatBeans, formatDelta } from "@/game/rooms";
 import { canBeat, parsePlay } from "@/game/rules";
 import { generateBeatingMoves } from "@/game/moves";
-import { TYPE_LABEL } from "@/game/types";
+import { playTypeLabel } from "@/game/types";
 import type { Player, TableAction } from "@/game/types";
 import PlayingCard from "@/components/PlayingCard.vue";
 import CardBack from "@/components/CardBack.vue";
@@ -403,6 +407,7 @@ import SettingsPanel from "@/components/SettingsPanel.vue";
 import CardCounter from "@/components/CardCounter.vue";
 import ClearCelebration from "@/components/ClearCelebration.vue";
 import SpringBanner from "@/components/SpringBanner.vue";
+import BombBanner from "@/components/BombBanner.vue";
 import BankruptcyModal from "@/components/BankruptcyModal.vue";
 
 const router = useRouter();
@@ -497,7 +502,7 @@ function decisionNegative(row: { player: Player }): boolean {
 function revealLabel(handCount: number, action: TableAction | null): string {
   if (handCount > 0) return `亮牌 ${handCount} 张`;
   if (action && action.kind === "play" && action.info) {
-    return TYPE_LABEL[action.info.type];
+    return playTypeLabel(action.info);
   }
   return "已出完";
 }
@@ -736,9 +741,9 @@ const selectionState = computed(() => {
     game.lastPlayerUid !== game.human.uid &&
     !canBeat(info, last)
   ) {
-    return { text: `${TYPE_LABEL[info.type]} · 打不过上家`, bad: true };
+    return { text: `${playTypeLabel(info)} · 打不过上家`, bad: true };
   }
-  return { text: TYPE_LABEL[info.type], bad: false };
+  return { text: playTypeLabel(info), bad: false };
 });
 
 const canPlay = computed(() => {

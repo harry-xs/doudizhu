@@ -1,5 +1,9 @@
 import type { Card, Suit } from "../src/game/types";
-import { parsePlay, canBeat } from "../src/game/rules";
+import {
+  parsePlay,
+  canBeat,
+  setBombStraightEnabled,
+} from "../src/game/rules";
 import { dealCards, sortCards } from "../src/game/deck";
 import { chooseMove, chooseCall } from "../src/game/ai";
 import { generateBeatingMoves } from "../src/game/moves";
@@ -77,6 +81,40 @@ check(
   tl([...many(8, 4), ...many(4, 2), card(5), card(6)]) === null,
 );
 
+setBombStraightEnabled(true);
+const chain2 = parsePlay([...many(3, 4), ...many(4, 4)])!;
+check(
+  "bombStraight parse",
+  chain2.type === "bombStraight" && chain2.length === 8 && chain2.rank === 4,
+);
+const chain3 = parsePlay([...many(3, 4), ...many(4, 4), ...many(5, 4)])!;
+check(
+  "bombStraight three in a row",
+  chain3.type === "bombStraight" && chain3.length === 12,
+);
+check(
+  "bombStraight excludes 2",
+  parsePlay([...many(14, 4), ...many(15, 4)]) === null,
+);
+check(
+  "bombStraight not consecutive",
+  parsePlay([...many(3, 4), ...many(5, 4)]) === null,
+);
+const chain45 = parsePlay([...many(4, 4), ...many(5, 4)])!;
+const chainMoves = generateBeatingMoves(
+  [...many(3, 4), ...many(4, 4), card(9)],
+  parsePlay(many(9, 4))!,
+);
+check(
+  "AI generates bombStraight",
+  chainMoves.some((move) => move.info.type === "bombStraight"),
+);
+setBombStraightEnabled(false);
+check(
+  "bombStraight disabled in classic mode",
+  parsePlay([...many(3, 4), ...many(4, 4)]) === null,
+);
+
 const pair4 = parsePlay(many(4, 2))!;
 const pair5 = parsePlay(many(5, 2))!;
 const straightA = parsePlay([3, 4, 5, 6, 7, 8].map((r) => card(r)))!;
@@ -90,6 +128,12 @@ check("different length straight cannot beat", !canBeat(straightB, straightA));
 check("bomb beats straight", canBeat(bomb, straightA));
 check("rocket beats bomb", canBeat(rocket, bomb));
 check("bomb cannot beat rocket", !canBeat(bomb, rocket));
+check("bombStraight beats rocket", canBeat(chain2, rocket));
+check("rocket cannot beat bombStraight", !canBeat(rocket, chain2));
+check("longer bombStraight beats shorter", canBeat(chain3, chain2));
+check("shorter bombStraight cannot beat longer", !canBeat(chain2, chain3));
+check("same length bombStraight compares rank", canBeat(chain45, chain2));
+check("lower bombStraight cannot beat higher", !canBeat(chain2, chain45));
 
 const fourWithTwo3 = parsePlay([...many(3, 4), card(4), card(5)])!;
 const fourWithTwo9 = parsePlay([...many(9, 4), card(4), card(5)])!;

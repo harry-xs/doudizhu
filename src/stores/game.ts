@@ -1,9 +1,9 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import type { Card, GamePhase, PlayInfo, Player, TableAction } from "@/game/types";
-import { TYPE_LABEL } from "@/game/types";
+import { playTypeLabel } from "@/game/types";
 import { dealCards, sortCards } from "@/game/deck";
-import { canBeat, parsePlay } from "@/game/rules";
+import { canBeat, parsePlay, setBombStraightEnabled } from "@/game/rules";
 import { chooseCall, chooseMove, suggestMoves, type AIPlayerInfo, type MoveContext } from "@/game/ai";
 import { chooseDouZeroMove, preloadDouZero } from "@/game/douzero";
 import type { Move } from "@/game/moves";
@@ -84,9 +84,14 @@ export const useGameStore = defineStore("game", () => {
   const robHappened = ref(false);
   const doubleActed = ref(0);
   const decisionLocked = ref(false);
+  const bombBanner = ref<{
+    kind: "bombStraight" | "kingBomb";
+    length: number;
+  } | null>(null);
 
   let gameToken = 0;
   let aiTimer: ReturnType<typeof setTimeout> | null = null;
+  let fxTimer: ReturnType<typeof setTimeout> | null = null;
   let hintKey = "";
   let hintIndex = 0;
   let hintMoves: Move[] = [];
@@ -188,6 +193,30 @@ export const useGameStore = defineStore("game", () => {
     }
   }
 
+  function clearBombFx(): void {
+    if (fxTimer) {
+      clearTimeout(fxTimer);
+      fxTimer = null;
+    }
+    bombBanner.value = null;
+  }
+
+  function showBombFx(
+    kind: "bombStraight" | "kingBomb",
+    length: number,
+  ): void {
+    if (!settings.animation) return;
+    bombBanner.value = { kind, length };
+    if (fxTimer) clearTimeout(fxTimer);
+    const bombs =
+      kind === "kingBomb" ? 2 : Math.max(2, Math.round(length / 4));
+    const duration = Math.min(2800, 1100 + bombs * 320);
+    fxTimer = setTimeout(() => {
+      bombBanner.value = null;
+      fxTimer = null;
+    }, duration);
+  }
+
   function schedule(fn: () => void, delay: number): void {
     clearTimer();
     const token = gameToken;
@@ -227,8 +256,10 @@ export const useGameStore = defineStore("game", () => {
     if (roomId) room.value = getRoom(roomId);
     gameToken++;
     clearTimer();
+    clearBombFx();
+    setBombStraightEnabled(!settings.shuffle);
     resetHint();
-    const dealt = dealCards();
+    const dealt = dealCards(settings.shuffle);
     players.value = resetPlayers();
     players.value.forEach((p, i) => {
       p.hand = dealt.hands[i];
@@ -539,6 +570,7 @@ export const useGameStore = defineStore("game", () => {
       if (spring > 1) {
         multiple.value *= spring;
         springBanner.value = landlordWon ? "spring" : "anti";
+        clearBombFx();
       }
       message.value =
         (landlordWon ? "地主胜利" : "农民胜利") +
@@ -626,14 +658,19 @@ export const useGameStore = defineStore("game", () => {
       },
     };
 
-    if (info.type === "bomb" || info.type === "kingBomb") {
+    if (info.type === "bombStraight") {
+      multiple.value *= 2 ** (info.length / 4);
+      sound("bomb");
+      showBombFx("bombStraight", info.length);
+    } else if (info.type === "bomb" || info.type === "kingBomb") {
       multiple.value *= 2;
       sound("bomb");
+      if (info.type === "kingBomb") showBombFx("kingBomb", 2);
     } else {
       sound("play");
     }
 
-    message.value = `${player.name} 出了 ${TYPE_LABEL[info.type]}`;
+    message.value = `${player.name} 出了 ${playTypeLabel(info)}`;
 
     if (checkWin(player)) return;
     advanceTurn();
@@ -757,8 +794,8 @@ export const useGameStore = defineStore("game", () => {
     selectedIds.value = move.cards.map((c) => c.id);
     message.value =
       hintMoves.length > 1
-        ? `提示 ${hintIndex + 1}/${hintMoves.length}：${TYPE_LABEL[move.info.type]}`
-        : `提示：${TYPE_LABEL[move.info.type]}`;
+        ? `提示 ${hintIndex + 1}/${hintMoves.length}：${playTypeLabel(move.info)}`
+        : `提示：${playTypeLabel(move.info)}`;
     sound("select");
   }
 
@@ -878,6 +915,7 @@ export const useGameStore = defineStore("game", () => {
   function resetToIdle(): void {
     gameToken++;
     clearTimer();
+    clearBombFx();
     resetHint();
     phase.value = "idle";
     players.value = resetPlayers();
@@ -925,6 +963,7 @@ export const useGameStore = defineStore("game", () => {
     resultReady,
     resultDismissed,
     springBanner,
+    bombBanner,
     tableActions,
     tableDecisions,
     playedCards,

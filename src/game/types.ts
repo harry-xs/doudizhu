@@ -35,6 +35,7 @@ export interface AppSetting {
   sound: boolean;
   animation: boolean;
   counter: boolean;
+  shuffle: boolean;
 }
 
 export type CardType =
@@ -51,6 +52,7 @@ export type CardType =
   | "fourWithTwo"
   | "fourWithTwoPairs"
   | "bomb"
+  | "bombStraight"
   | "kingBomb";
 
 export interface PlayInfo {
@@ -79,8 +81,19 @@ export const TYPE_LABEL: Record<CardType, string> = {
   fourWithTwo: "四带二",
   fourWithTwoPairs: "四带两对",
   bomb: "炸弹",
+  bombStraight: "连炸",
   kingBomb: "王炸",
 };
+
+const CHAIN_NUM = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+
+export function playTypeLabel(info: PlayInfo): string {
+  if (info.type === "bombStraight") {
+    const count = Math.round(info.length / 4);
+    return `${CHAIN_NUM[count] ?? count}连炸`;
+  }
+  return TYPE_LABEL[info.type];
+}
 
 export const RANK_LABEL: Record<number, string> = {
   11: "J",

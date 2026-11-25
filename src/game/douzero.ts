@@ -171,21 +171,23 @@ function oneHotBombNum(count: number): Float32Array {
   return out;
 }
 
-function isBombAction(cards: Card[]): boolean {
-  if (cards.length === 4) {
-    const rank = cards[0].rank;
-    return cards.every((card) => card.rank === rank);
-  }
+function bombValue(cards: Card[]): number {
   if (cards.length === 2) {
-    return cards.every((card) => card.rank >= 16);
+    return cards.every((card) => card.rank >= 16) ? 1 : 0;
   }
-  return false;
+  if (cards.length < 4 || cards.length % 4 !== 0) return 0;
+  const counts = new Map<number, number>();
+  for (const card of cards) {
+    counts.set(card.rank, (counts.get(card.rank) ?? 0) + 1);
+  }
+  const values = [...counts.values()];
+  return values.every((n) => n === 4) ? values.length : 0;
 }
 
 function countBombs(actionSeq: Card[][]): number {
   let bombs = 0;
   for (const action of actionSeq) {
-    if (action.length > 0 && isBombAction(action)) bombs++;
+    bombs += bombValue(action);
   }
   return Math.max(0, Math.min(14, bombs));
 }

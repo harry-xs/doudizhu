@@ -13,12 +13,13 @@ function loadSetting(): AppSetting {
         sound: parsed.sound !== false,
         animation: parsed.animation !== false,
         counter: parsed.counter !== false,
+        shuffle: parsed.shuffle !== false,
       };
     }
   } catch {
     // 读取失败时使用默认配置
   }
-  return { sound: true, animation: true, counter: true };
+  return { sound: true, animation: true, counter: true, shuffle: true };
 }
 
 export const useSettingsStore = defineStore("settings", () => {
@@ -26,6 +27,7 @@ export const useSettingsStore = defineStore("settings", () => {
   const sound = ref(initial.sound);
   const animation = ref(initial.animation);
   const counter = ref(initial.counter);
+  const shuffle = ref(initial.shuffle);
 
   function persist(): void {
     try {
@@ -35,6 +37,7 @@ export const useSettingsStore = defineStore("settings", () => {
           sound: sound.value,
           animation: animation.value,
           counter: counter.value,
+          shuffle: shuffle.value,
         }),
       );
     } catch {
@@ -57,10 +60,16 @@ export const useSettingsStore = defineStore("settings", () => {
     persist();
   }
 
+  function toggleShuffle(): void {
+    shuffle.value = !shuffle.value;
+    persist();
+  }
+
   function reset(): void {
     sound.value = true;
     animation.value = true;
     counter.value = true;
+    shuffle.value = true;
     persist();
   }
 
@@ -68,9 +77,11 @@ export const useSettingsStore = defineStore("settings", () => {
     sound,
     animation,
     counter,
+    shuffle,
     toggleSound,
     toggleAnimation,
     toggleCounter,
+    toggleShuffle,
     reset,
   };
 });

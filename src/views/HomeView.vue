@@ -18,14 +18,34 @@
           </div>
         </div>
 
-        <div class="wallet glass" @click="onWalletClick">
-          <span class="wallet__label">我的余额</span>
-          <strong
-            class="wallet__value"
-            :class="{ 'wallet__value--neg': beans < 0 }"
-          >
-            ${{ formatBeans(beans) }}
-          </strong>
+        <div class="status">
+          <div class="wallet glass" @click="onWalletClick">
+            <span class="wallet__label">我的余额</span>
+            <strong
+              class="wallet__value"
+              :class="{ 'wallet__value--neg': beans < 0 }"
+            >
+              ${{ formatBeans(beans) }}
+            </strong>
+          </div>
+          <div class="mode-switch glass" role="group" aria-label="发牌模式">
+            <button
+              type="button"
+              class="mode-switch__btn"
+              :class="{ 'mode-switch__btn--on': settings.shuffle }"
+              @click="chooseMode(true)"
+            >
+              经典
+            </button>
+            <button
+              type="button"
+              class="mode-switch__btn"
+              :class="{ 'mode-switch__btn--on': !settings.shuffle }"
+              @click="chooseMode(false)"
+            >
+              不洗牌
+            </button>
+          </div>
         </div>
       </div>
 
@@ -128,6 +148,10 @@ const demoCards: Card[] = [
   { id: "demo-2", suit: "heart", rank: 15 },
   { id: "demo-3", suit: "joker", rank: 17 },
 ];
+
+function chooseMode(shuffle: boolean): void {
+  if (settings.shuffle !== shuffle) settings.toggleShuffle();
+}
 
 function startGame(roomId: string): void {
   const room = ROOMS.find((item) => item.id === roomId);
@@ -272,8 +296,14 @@ function closeSubsidy(): void {
   }
 }
 
-.wallet {
+.status {
   margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wallet {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -355,6 +385,32 @@ function closeSubsidy(): void {
 .room__base {
   font-size: 10px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+.mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+}
+
+.mode-switch__btn {
+  height: 28px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.mode-switch__btn--on {
+  background: rgba(212, 175, 55, 0.85);
+  color: #1c1200;
 }
 
 .actions {

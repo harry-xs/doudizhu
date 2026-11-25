@@ -1,5 +1,16 @@
 import type { Card, CardType, PlayInfo } from "./types";
 
+// 连炸仅在「不洗牌模式」启用；由游戏 store 在开局时设置
+let bombStraightEnabled = false;
+
+export function setBombStraightEnabled(enabled: boolean): void {
+  bombStraightEnabled = enabled;
+}
+
+export function isBombStraightEnabled(): boolean {
+  return bombStraightEnabled;
+}
+
 export function groupByRank(cards: Card[]): Map<number, Card[]> {
   const map = new Map<number, Card[]>();
   for (const card of cards) {
@@ -104,6 +115,22 @@ export function parsePlay(cards: Card[]): PlayInfo | null {
     return { type: "bomb", rank: ranks[0], length: 4 };
   }
 
+  // 连炸：两个或以上相邻点数的炸弹（2 和王不能参与连炸）
+  if (
+    bombStraightEnabled &&
+    n >= 8 &&
+    n % 4 === 0 &&
+    ranks.length === n / 4 &&
+    countList.every((c) => c === 4) &&
+    isConsecutive(ranks)
+  ) {
+    return {
+      type: "bombStraight",
+      rank: ranks[ranks.length - 1],
+      length: n,
+    };
+  }
+
   if (n === 1) return { type: "single", rank: ranks[0], length: 1 };
   if (n === 2 && ranks.length === 1)
     return { type: "pair", rank: ranks[0], length: 2 };
@@ -185,6 +212,18 @@ export function parsePlay(cards: Card[]): PlayInfo | null {
 }
 
 export function canBeat(candidate: PlayInfo, last: PlayInfo): boolean {
+  // 连炸 > 王炸 > 普通炸弹 > 普通牌型
+  if (candidate.type === "bombStraight") {
+    if (last.type === "bombStraight") {
+      if (candidate.length !== last.length) {
+        return candidate.length > last.length;
+      }
+      return candidate.rank > last.rank;
+    }
+    return true;
+  }
+  if (last.type === "bombStraight") return false;
+
   if (candidate.type === "kingBomb") return true;
   if (last.type === "kingBomb") return false;
   if (candidate.type === "bomb") {

@@ -1,5 +1,10 @@
 import type { Card, PlayInfo } from "./types";
-import { canBeat, groupByRank, parsePlay } from "./rules";
+import {
+  canBeat,
+  groupByRank,
+  isBombStraightEnabled,
+  parsePlay,
+} from "./rules";
 
 export interface Move {
   cards: Card[];
@@ -73,6 +78,23 @@ function collectBounds(
     cards.push(...group.slice(0, perRank));
   }
   return cards;
+}
+
+function collectBombStraights(
+  groups: Map<number, Card[]>,
+  add: (cards: Card[] | null) => void,
+): void {
+  for (let start = 3; start <= 14; start++) {
+    let run = 0;
+    while (start + run <= 14) {
+      const group = groups.get(start + run);
+      if (!group || group.length < 4) break;
+      run++;
+    }
+    for (let n = 2; n <= run; n++) {
+      add(collectBounds(groups, start, n, 4));
+    }
+  }
 }
 
 export function generateBeatingMoves(hand: Card[], last: PlayInfo): Move[] {
@@ -170,12 +192,19 @@ export function generateBeatingMoves(hand: Card[], last: PlayInfo): Move[] {
       }
       break;
     }
+    case "bombStraight":
+      collectBombStraights(groups, add);
+      break;
     case "bomb":
     case "kingBomb":
       break;
   }
 
-  if (last.type !== "kingBomb") {
+  if (isBombStraightEnabled()) {
+    collectBombStraights(groups, add);
+  }
+
+  if (last.type !== "bombStraight" && last.type !== "kingBomb") {
     const minBomb = last.type === "bomb" ? last.rank : -1;
     for (const rank of ranks) {
       if (rank > minBomb && groups.get(rank)!.length >= 4) {
@@ -231,6 +260,10 @@ export function generateAllMoves(hand: Card[]): Move[] {
 
   if (groups.has(16) && groups.has(17)) {
     add([groups.get(16)![0], groups.get(17)![0]]);
+  }
+
+  if (isBombStraightEnabled()) {
+    collectBombStraights(groups, add);
   }
 
   for (let length = 5; length <= 12; length++) {
