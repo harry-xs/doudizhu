@@ -4,7 +4,7 @@ import type { Card, GamePhase, PlayInfo, Player, TableAction } from "@/game/type
 import { playTypeLabel } from "@/game/types";
 import { dealCards, sortCards } from "@/game/deck";
 import { canBeat, parsePlay, setBombStraightEnabled } from "@/game/rules";
-import { chooseCall, chooseMove, suggestMoves, type AIPlayerInfo, type MoveContext } from "@/game/ai";
+import { chooseBombOverride, chooseCall, chooseMove, suggestMoves, type AIPlayerInfo, type MoveContext } from "@/game/ai";
 import { chooseDouZeroMove, preloadDouZero } from "@/game/douzero";
 import type { Move } from "@/game/moves";
 import { playSound } from "@/game/sound";
@@ -868,6 +868,15 @@ export const useGameStore = defineStore("game", () => {
       return;
     }
     if (choice?.kind === "pass" && canPass) {
+      const override = chooseBombOverride(
+        player.hand,
+        lastInfo,
+        buildAIContext(player.uid),
+      );
+      if (override) {
+        commitPlay(player, override.cards, override.info);
+        return;
+      }
       passTurn(player);
       return;
     }
@@ -878,6 +887,15 @@ export const useGameStore = defineStore("game", () => {
       return;
     }
     if (lastInfo) {
+      const override = chooseBombOverride(
+        player.hand,
+        lastInfo,
+        buildAIContext(player.uid),
+      );
+      if (override) {
+        commitPlay(player, override.cards, override.info);
+        return;
+      }
       passTurn(player);
       return;
     }

@@ -5,7 +5,12 @@ import {
   setBombStraightEnabled,
 } from "../src/game/rules";
 import { dealCards, sortCards } from "../src/game/deck";
-import { chooseMove, chooseCall } from "../src/game/ai";
+import {
+  chooseBombOverride,
+  chooseMove,
+  chooseCall,
+  suggestMoves,
+} from "../src/game/ai";
 import { generateAllMoves, generateBeatingMoves } from "../src/game/moves";
 
 let passed = 0;
@@ -235,6 +240,73 @@ check(
 check(
   "beating move still offers king bomb",
   rocketBeating.some((move) => move.info.type === "kingBomb"),
+);
+
+const bombHeavyHand = [
+  ...many(5, 4),
+  ...many(6, 4),
+  ...many(7, 4),
+  ...many(8, 4),
+];
+const tripleWithOneLast = parsePlay([...many(3, 3), card(9)])!;
+const bombCtx = {
+  self: {
+    uid: "p2",
+    isLandlord: false,
+    handCount: bombHeavyHand.length,
+  },
+  players: [
+    { uid: "p0", isLandlord: true, handCount: 12 },
+    { uid: "p1", isLandlord: false, handCount: 9 },
+    { uid: "p2", isLandlord: false, handCount: bombHeavyHand.length },
+  ],
+  lastPlayerUid: "p0",
+  landlordUid: "p0",
+  playedCards: [] as Card[],
+};
+setBombStraightEnabled(true);
+const aggressiveBomb = chooseMove(
+  bombHeavyHand,
+  tripleWithOneLast,
+  bombCtx,
+);
+check(
+  "bomb-heavy mode AI bombs instead of passing",
+  !!aggressiveBomb &&
+    (aggressiveBomb.info.type === "bomb" ||
+      aggressiveBomb.info.type === "bombStraight" ||
+      aggressiveBomb.info.type === "kingBomb"),
+);
+const bombOverride = chooseBombOverride(
+  bombHeavyHand,
+  tripleWithOneLast,
+  bombCtx,
+);
+check(
+  "bomb override triggers in no-shuffle mode",
+  !!bombOverride &&
+    (bombOverride.info.type === "bomb" ||
+      bombOverride.info.type === "bombStraight" ||
+      bombOverride.info.type === "kingBomb"),
+);
+const hintHand = [...many(4, 4), ...many(8, 4), ...many(9, 4)];
+const hintBombs = suggestMoves(
+  hintHand,
+  parsePlay(many(3, 4))!,
+  bombCtx,
+);
+check(
+  "hint prefers the smallest bomb over a bigger bombStraight",
+  hintBombs[0]?.info.type === "bomb" && hintBombs[0]?.info.rank === 4,
+);
+setBombStraightEnabled(false);
+check(
+  "classic mode still conserves bombs",
+  chooseMove(bombHeavyHand, tripleWithOneLast, bombCtx) === null,
+);
+check(
+  "bomb override disabled in classic mode",
+  chooseBombOverride(bombHeavyHand, tripleWithOneLast, bombCtx) === null,
 );
 
 let calls = 0;

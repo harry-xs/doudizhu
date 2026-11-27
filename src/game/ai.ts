@@ -1,5 +1,6 @@
 import type { Card, PlayInfo } from "./types";
 import { generateAllMoves, generateBeatingMoves, type Move } from "./moves";
+import { isBombStraightEnabled } from "./rules";
 
 export interface AIPlayerInfo {
   uid: string;
@@ -252,9 +253,68 @@ function isBombMove(move: Move): boolean {
   );
 }
 
+/**
+ * 炸弹类出牌的“代价”排序：普通炸弹 < 连炸 < 王炸，
+ * 同类里优先用更小/更短的炸弹，避免提示一上来就让玩家用更大的炸弹。
+ */
+function bombPriority(move: Move): number {
+  if (move.info.type === "bomb") return move.info.rank;
+  if (move.info.type === "bombStraight") {
+    return 1000 + move.info.length * 100 + move.info.rank;
+  }
+  return 100000;
+}
+
 function removeMoveCards(hand: Card[], move: Move): Card[] {
   const ids = new Set(move.cards.map((c) => c.id));
   return hand.filter((c) => !ids.has(c.id));
+}
+
+function countBombGroups(hand: Card[]): number {
+  const counts = countsOf(hand);
+  let bombs = 0;
+  for (let rank = 3; rank <= 15; rank++) {
+    if (counts[rank] === 4) bombs++;
+  }
+  if (counts[16] > 0 && counts[17] > 0) bombs++;
+  return bombs;
+}
+
+/**
+ * 判断当前局面是否值得用炸弹压住上家。
+ * 不洗牌模式下手牌炸弹很多，炸弹价值相对更低，需要更主动地出炸，
+ * 否则容易一直被对手压着打完。
+ */
+function shouldUseBomb(
+  hand: Card[],
+  ctx: SeatContext,
+  last: PlayInfo,
+): boolean {
+  const lastCount = ctx.lastPlayer?.handCount ?? 99;
+  const emergency =
+    lastCount <= 2 || ctx.minOpponentCount <= 2 || hand.length <= 4;
+  if (emergency) return true;
+
+  const remainingEstimate = estimateHand(hand);
+  if (remainingEstimate.hands <= 2) return true;
+  if (!ctx.isFarmer && ctx.minOpponentCount <= 3) return true;
+  if (ctx.isFarmer && ctx.landlord.handCount <= 3) return true;
+
+  if (!isBombStraightEnabled()) return false;
+
+  // 以下是「不洗牌模式」的主动出炸策略。
+  if (ctx.lastIsTeammate) {
+    // 尽量不炸队友，除非地主马上就走完了。
+    return ctx.minOpponentCount <= 2;
+  }
+
+  const myBombs = countBombGroups(hand);
+  if (myBombs >= 2) return true;
+  if (ctx.isFarmer && ctx.landlord.handCount <= 8) return true;
+  if (!ctx.isFarmer && ctx.minOpponentCount <= 8) return true;
+
+  // 上家出的是很小的牌时，不急着用仅有的一个炸弹去换。
+  return last.rank >= 14;
 }
 
 function usedControlCost(move: Move): number {
@@ -530,15 +590,7 @@ export function chooseMove(
     }
 
     if (bombs.length === 0) return null;
-
-    const remainingEstimate = estimateHand(hand);
-    const shouldBomb =
-      emergency ||
-      remainingEstimate.hands <= 2 ||
-      (!ctx.isFarmer && ctx.minOpponentCount <= 3) ||
-      (ctx.isFarmer && ctx.landlord.handCount <= 3);
-
-    if (!shouldBomb) return null;
+    if (!shouldUseBomb(hand, ctx, last)) return null;
 
     return pickBest(bombs, (move) => baseScore(hand, move));
   }
@@ -577,6 +629,23 @@ export function chooseMove(
 }
 
 /**
+ * 不洗牌模式下，DouZero 往往低估炸弹价值而选择不出。
+ * 这里提供一个「主动出炸」兜底：当模型选择不出、但局势值得炸时，改为出炸。
+ */
+export function chooseBombOverride(
+  hand: Card[],
+  last: PlayInfo | null,
+  context: MoveContext,
+): Move | null {
+  if (!last || !isBombStraightEnabled()) return null;
+  const ctx = analyzeContext(context);
+  const bombs = generateBeatingMoves(hand, last).filter(isBombMove);
+  if (bombs.length === 0) return null;
+  if (!shouldUseBomb(hand, ctx, last)) return null;
+  return pickBest(bombs, (move) => baseScore(hand, move));
+}
+
+/**
  * 返回当前局面下按推荐程度排序的候选出牌，供“提示”按钮循环使用。
  * 非炸弹牌型优先，炸弹/王炸放在最后。
  */
@@ -598,7 +667,7 @@ export function suggestMoves(
       baseScore(hand, move) +
       (unseen && isUnbeatable(move, unseen) ? -10 : 0);
     normal.sort((a, b) => responseScore(a) - responseScore(b));
-    bombs.sort((a, b) => responseScore(a) - responseScore(b));
+    bombs.sort((a, b) => bombPriority(a) - bombPriority(b));
     return [...normal, ...bombs];
   }
 
