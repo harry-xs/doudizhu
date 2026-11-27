@@ -1680,9 +1680,9 @@ onBeforeUnmount(() => {
 .action--hint {
   min-width: 58px;
   padding: 0 8px;
-  color: #bfe0ff;
-  border-color: rgba(96, 165, 250, 0.45);
-  background: rgba(96, 165, 250, 0.15);
+  color: rgba(216, 220, 226, 0.62);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(190, 197, 207, 0.09);
 }
 
 .action--pass {
