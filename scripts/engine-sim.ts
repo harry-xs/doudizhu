@@ -6,7 +6,7 @@ import {
 } from "../src/game/rules";
 import { dealCards, sortCards } from "../src/game/deck";
 import { chooseMove, chooseCall } from "../src/game/ai";
-import { generateBeatingMoves } from "../src/game/moves";
+import { generateAllMoves, generateBeatingMoves } from "../src/game/moves";
 
 let passed = 0;
 const failures: string[] = [];
@@ -59,6 +59,34 @@ check(
 check(
   "plane with one invalid length",
   tl([...many(3, 3), ...many(4, 3), card(5), card(6), card(7)]) === null,
+);
+const quadWingPlane = parsePlay([
+  ...many(3, 3),
+  ...many(4, 4),
+  card(5),
+])!;
+check(
+  "plane with quad leftover wing 33344445",
+  quadWingPlane.type === "planeWithOne" && quadWingPlane.rank === 4,
+);
+const longQuadWingPlane = parsePlay([
+  ...many(5, 4),
+  ...many(6, 3),
+  ...many(7, 3),
+  card(8),
+  card(9),
+])!;
+check(
+  "plane with quad leftover wing 555566677789",
+  longQuadWingPlane.type === "planeWithOne" && longQuadWingPlane.rank === 7,
+);
+check(
+  "AI generates plane with quad leftover wing",
+  generateAllMoves([
+    ...many(3, 3),
+    ...many(4, 4),
+    card(5),
+  ]).some((move) => move.info.type === "planeWithOne" && move.info.rank === 4),
 );
 check(
   "fourWithTwo",
@@ -170,6 +198,43 @@ check(
   fourWithTwoPairsMoves.some(
     (move) => move.info.type === "fourWithTwoPairs" && move.info.rank === 9,
   ),
+);
+
+const bombHand = [...many(5, 4), card(9)];
+const single4 = parsePlay([card(4)])!;
+const bombBeating = generateBeatingMoves(bombHand, single4);
+check(
+  "beating move does not split bomb",
+  !bombBeating.some(
+    (move) =>
+      move.info.type !== "bomb" &&
+      move.cards.some((card) => card.rank === 5),
+  ),
+);
+check(
+  "beating move still offers bomb",
+  bombBeating.some((move) => move.info.type === "bomb"),
+);
+const bombLead = generateAllMoves(bombHand);
+check(
+  "lead moves do not split bomb",
+  !bombLead.some((move) => {
+    if (move.info.type === "bomb") return false;
+    const used = move.cards.filter((card) => card.rank === 5).length;
+    return used > 0 && used < 4;
+  }),
+);
+const rocketHand = [card(16, "joker"), card(17, "joker"), card(9)];
+const rocketBeating = generateBeatingMoves(rocketHand, single4);
+check(
+  "beating move does not split rocket",
+  !rocketBeating.some(
+    (move) => move.info.type === "single" && move.cards[0].rank >= 16,
+  ),
+);
+check(
+  "beating move still offers king bomb",
+  rocketBeating.some((move) => move.info.type === "kingBomb"),
 );
 
 let calls = 0;

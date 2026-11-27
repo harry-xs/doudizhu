@@ -23,6 +23,43 @@ function makeMove(cards: Card[]): Move | null {
   return info ? { cards, info } : null;
 }
 
+function isBombType(move: Move): boolean {
+  return (
+    move.info.type === "bomb" ||
+    move.info.type === "bombStraight" ||
+    move.info.type === "kingBomb"
+  );
+}
+
+/**
+ * 判断一手牌是否把炸弹/王炸拆开使用（例如从 3333 中只出 3 张或更少）。
+ * 这类出法对玩家来说极不合理，AI 与提示都应避免。
+ */
+function breaksBomb(hand: Card[], cards: Card[]): boolean {
+  const before = new Map<number, number>();
+  for (const card of hand) {
+    before.set(card.rank, (before.get(card.rank) ?? 0) + 1);
+  }
+  const used = new Map<number, number>();
+  for (const card of cards) {
+    used.set(card.rank, (used.get(card.rank) ?? 0) + 1);
+  }
+
+  for (const [rank, count] of before) {
+    if (count !== 4) continue;
+    const usedCount = used.get(rank) ?? 0;
+    if (usedCount > 0 && usedCount < 4) return true;
+  }
+
+  if ((before.get(16) ?? 0) > 0 && (before.get(17) ?? 0) > 0) {
+    const small = (used.get(16) ?? 0) > 0;
+    const big = (used.get(17) ?? 0) > 0;
+    if (small !== big) return true;
+  }
+
+  return false;
+}
+
 function pickKickers(
   hand: Card[],
   used: Card[],
@@ -107,6 +144,7 @@ export function generateBeatingMoves(hand: Card[], last: PlayInfo): Move[] {
     if (!cards) return;
     const move = makeMove(cards);
     if (!move || !canBeat(move.info, last)) return;
+    if (!isBombType(move) && breaksBomb(hand, cards)) return;
     const key = keyOf(cards);
     if (seen.has(key)) return;
     seen.add(key);
@@ -174,9 +212,9 @@ export function generateBeatingMoves(hand: Card[], last: PlayInfo): Move[] {
           add(used);
           continue;
         }
-        const exclude = new Set<number>();
-        for (let r = start; r < start + n; r++) exclude.add(r);
-        const kicker = pickKickers(hand, used, n, wing === 2, exclude);
+        // 飞机带翅膀时，四张点数中剩余的第四张也可以作为翅膀，
+        // 因此这里只按已使用的牌过滤，而不排除整个点数。
+        const kicker = pickKickers(hand, used, n, wing === 2, new Set());
         if (kicker) add([...used, ...kicker]);
       }
       break;
@@ -229,6 +267,7 @@ export function generateAllMoves(hand: Card[]): Move[] {
     if (!cards) return;
     const move = makeMove(cards);
     if (!move) return;
+    if (!isBombType(move) && breaksBomb(hand, cards)) return;
     const key = keyOf(cards);
     if (seen.has(key)) return;
     seen.add(key);
@@ -283,11 +322,9 @@ export function generateAllMoves(hand: Card[]): Move[] {
       const used = collectBounds(groups, start, n, 3);
       if (!used) continue;
       add(used);
-      const exclude = new Set<number>();
-      for (let r = start; r < start + n; r++) exclude.add(r);
-      const ones = pickKickers(hand, used, n, false, exclude);
+      const ones = pickKickers(hand, used, n, false, new Set());
       if (ones) add([...used, ...ones]);
-      const twos = pickKickers(hand, used, n, true, exclude);
+      const twos = pickKickers(hand, used, n, true, new Set());
       if (twos) add([...used, ...twos]);
     }
   }

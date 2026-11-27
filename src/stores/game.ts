@@ -92,6 +92,9 @@ export const useGameStore = defineStore("game", () => {
   let gameToken = 0;
   let aiTimer: ReturnType<typeof setTimeout> | null = null;
   let fxTimer: ReturnType<typeof setTimeout> | null = null;
+  // 炸弹特效展示期间先不让 AI 出牌，避免特效还没看清下一手就已经打出来。
+  let fxHoldUntil = 0;
+  const BOMB_FX_HOLD = 1000;
   let hintKey = "";
   let hintIndex = 0;
   let hintMoves: Move[] = [];
@@ -198,7 +201,12 @@ export const useGameStore = defineStore("game", () => {
       clearTimeout(fxTimer);
       fxTimer = null;
     }
+    fxHoldUntil = 0;
     bombBanner.value = null;
+  }
+
+  function fxHoldRemaining(): number {
+    return Math.max(0, fxHoldUntil - Date.now());
   }
 
   function showBombFx(
@@ -207,6 +215,7 @@ export const useGameStore = defineStore("game", () => {
   ): void {
     if (!settings.animation) return;
     bombBanner.value = { kind, length };
+    fxHoldUntil = Date.now() + BOMB_FX_HOLD;
     if (fxTimer) clearTimeout(fxTimer);
     const bombs =
       kind === "kingBomb" ? 2 : Math.max(2, Math.round(length / 4));
@@ -347,10 +356,13 @@ export const useGameStore = defineStore("game", () => {
       if (!p) return;
       const auto = p.isRobot || (p.uid === human.value.uid && p.isTrustee);
       if (!auto) return;
-      schedule(() => {
-        if (phase.value !== "play") return;
-        void aiPlay();
-      }, 500);
+      schedule(
+        () => {
+          if (phase.value !== "play") return;
+          void aiPlay();
+        },
+        Math.max(500, fxHoldRemaining()),
+      );
     }
   }
 
@@ -369,20 +381,33 @@ export const useGameStore = defineStore("game", () => {
       const callerIndex = players.value.findIndex((p) => p.uid === uid);
       tentativeLandlordUid.value = uid;
       setDecision(uid, "叫地主");
-      robQueue.value = [1, 2, 0].map(
-        (step) =>
-          players.value[
-            (callerIndex + step) % players.value.length
-          ].uid,
+      // 已经选择「不叫」的玩家不再参与抢地主，避免点了不做地主后又被追问一次。
+      const declined = new Set(
+        players.value
+          .filter((p) => tableDecisions.value[p.uid] === "不叫")
+          .map((p) => p.uid),
       );
+      robQueue.value = [1, 2, 0]
+        .map(
+          (step) =>
+            players.value[
+              (callerIndex + step) % players.value.length
+            ].uid,
+        )
+        .filter((robUid) => !declined.has(robUid));
       robIndex.value = 0;
       robHappened.value = false;
       doubleActed.value = 0;
       decisionLocked.value = false;
       phase.value = "rob";
+      sound("button");
+      if (robQueue.value.length <= 1) {
+        // 其余玩家都已放弃，无人可抢，直接确定地主。
+        finalizeLandlord();
+        return;
+      }
       turnUid.value = robQueue.value[0];
       message.value = `${player.name} 叫地主，等待抢地主`;
-      sound("button");
       handleTurn();
       return;
     }

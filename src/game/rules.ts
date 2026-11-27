@@ -55,7 +55,9 @@ function detectPlaneWithWings(
   total: number,
   wingSize: 1 | 2,
 ): PlaneCheck | null {
-  const tripleRanks = ranks.filter((r) => (counts.get(r) ?? 0) === 3 && r <= 14);
+  // 三张底牌允许来自四张（炸弹）中的三张，剩余的第四张可以充当翅膀，
+  // 例如 33344445（333 + 444 + 4 + 5）和 555566677789。
+  const tripleRanks = ranks.filter((r) => (counts.get(r) ?? 0) >= 3 && r <= 14);
   if (tripleRanks.length < 2) return null;
 
   const unit = wingSize === 1 ? 4 : 5;
@@ -69,13 +71,19 @@ function detectPlaneWithWings(
     if (run.length < n) continue;
     for (let start = 0; start + n <= run.length; start++) {
       const seq = run.slice(start, start + n);
-      // wings: everything except the 3 cards of each sequence rank
+      // 至少有一个飞机点数正好三张，避免把 33334444 这类全炸弹牌型
+      // 误判成飞机带翅膀（连炸关闭时仍应视为无效）。
+      if (wingSize === 1 && !seq.some((r) => counts.get(r) === 3)) {
+        continue;
+      }
+      // wings: 每个飞机点数各用掉 3 张，剩下的牌全部作为翅膀
       const wingCounts = new Map<number, number>();
       let wingTotal = 0;
       for (const [rank, count] of counts) {
-        if (seq.includes(rank)) continue;
-        wingCounts.set(rank, count);
-        wingTotal += count;
+        const remain = count - (seq.includes(rank) ? 3 : 0);
+        if (remain <= 0) continue;
+        wingCounts.set(rank, remain);
+        wingTotal += remain;
       }
       if (wingTotal !== n * wingSize) continue;
 
