@@ -51,7 +51,7 @@
 
       <div class="rooms">
         <button
-          v-for="room in ROOMS"
+          v-for="room in rooms"
           :key="room.id"
           type="button"
           class="room"
@@ -101,7 +101,7 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { Card } from "@/game/types";
-import { ROOMS, formatBeans } from "@/game/rooms";
+import { formatBeans, getRooms } from "@/game/rooms";
 import PlayingCard from "@/components/PlayingCard.vue";
 import SettingsPanel from "@/components/SettingsPanel.vue";
 import GoldAdminModal from "@/components/GoldAdminModal.vue";
@@ -120,6 +120,7 @@ const goldAdminOpen = ref(false);
 const subsidyOpen = ref(false);
 const pendingRoomId = ref<string | null>(null);
 const beans = computed(() => wallet.get("p0"));
+const rooms = computed(() => getRooms(settings.shuffle));
 
 let walletClicks = 0;
 let walletTimer: ReturnType<typeof setTimeout> | null = null;
@@ -154,7 +155,7 @@ function chooseMode(shuffle: boolean): void {
 }
 
 function startGame(roomId: string): void {
-  const room = ROOMS.find((item) => item.id === roomId);
+  const room = rooms.value.find((item) => item.id === roomId);
   if (!room || beans.value < room.minBeans) return;
   if (wallet.hasPendingSubsidy()) {
     pendingRoomId.value = roomId;
@@ -165,7 +166,7 @@ function startGame(roomId: string): void {
 }
 
 function launchGame(roomId: string): void {
-  const room = ROOMS.find((item) => item.id === roomId);
+  const room = rooms.value.find((item) => item.id === roomId);
   if (!room || wallet.get("p0") < room.minBeans) return;
   playSound("button", settings.sound);
   game.newGame(roomId);

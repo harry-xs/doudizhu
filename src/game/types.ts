@@ -36,6 +36,7 @@ export interface AppSetting {
   animation: boolean;
   counter: boolean;
   shuffle: boolean;
+  baseBet: number;
 }
 
 export type CardType =

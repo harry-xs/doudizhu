@@ -8,7 +8,7 @@
         <div class="scoreboard__stats">
           <div class="scoreboard__item">
             <span class="scoreboard__label">底注</span>
-            <strong class="scoreboard__value">${{ BEAN_BASE }}</strong>
+            <strong class="scoreboard__value">${{ formatBeans(settings.baseBet) }}</strong>
           </div>
           <span class="scoreboard__divider"></span>
           <div class="scoreboard__item">
@@ -394,7 +394,7 @@ import { useRouter } from "vue-router";
 import { useGameStore } from "@/stores/game";
 import { useSettingsStore } from "@/stores/settings";
 import { useWalletStore } from "@/stores/wallet";
-import { BEAN_BASE, formatBeans, formatDelta } from "@/game/rooms";
+import { formatBeans, formatDelta } from "@/game/rooms";
 import { canBeat, parsePlay } from "@/game/rules";
 import { generateBeatingMoves } from "@/game/moves";
 import { playTypeLabel } from "@/game/types";

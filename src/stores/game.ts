@@ -262,7 +262,7 @@ export const useGameStore = defineStore("game", () => {
   }
 
   function newGame(roomId?: string): void {
-    if (roomId) room.value = getRoom(roomId);
+    if (roomId) room.value = getRoom(roomId, settings.shuffle);
     gameToken++;
     clearTimer();
     clearBombFx();
@@ -618,6 +618,7 @@ export const useGameStore = defineStore("game", () => {
           farmerUids,
           landlordWon,
           multiple: multiple.value,
+          base: settings.baseBet,
           deferSubsidy: true,
         });
         beanDeltas.value = result.deltas;
@@ -765,22 +766,6 @@ export const useGameStore = defineStore("game", () => {
     if (!isHumanTurn.value || humanAuto.value) return;
 
     const last = lastPlayInfo.value;
-    const lastOwner = players.value.find(
-      (p) => p.uid === lastPlayerUid.value,
-    );
-    const lastIsTeammate =
-      !!lastOwner &&
-      !lastOwner.isLandlord &&
-      !human.value.isLandlord &&
-      lastOwner.uid !== human.value.uid;
-
-    if (last && lastIsTeammate) {
-      selectedIds.value = [];
-      message.value = "队友出牌，建议不出";
-      resetHint();
-      sound("pass");
-      return;
-    }
 
     const signature = [
       human.value.hand

@@ -5,6 +5,22 @@
         <h2 class="panel__title">余额调整</h2>
         <p class="panel__hint">修改后立即保存到本地</p>
 
+        <div class="row">
+          <span class="row__name">底注</span>
+          <div class="row__field">
+            <span class="row__currency">$</span>
+            <input
+              v-model="baseBetValue"
+              class="row__input"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              step="10"
+              placeholder="120"
+            />
+          </div>
+        </div>
+
         <div v-for="item in items" :key="item.uid" class="row">
           <span class="row__name">{{ item.name }}</span>
           <div class="row__field">
@@ -40,11 +56,14 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useWalletStore } from "@/stores/wallet";
+import { useSettingsStore } from "@/stores/settings";
+import { BEAN_BASE } from "@/game/rooms";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ (e: "close"): void }>();
 
 const wallet = useWalletStore();
+const settings = useSettingsStore();
 
 const items = [
   { uid: "p0", name: "我" },
@@ -58,10 +77,13 @@ const values = ref<Record<string, number | string>>({
   p2: 0,
 });
 
+const baseBetValue = ref<number | string>(settings.baseBet);
+
 watch(
   () => props.open,
   (open) => {
     if (!open) return;
+    baseBetValue.value = settings.baseBet;
     for (const item of items) {
       values.value[item.uid] = wallet.get(item.uid);
     }
@@ -80,6 +102,11 @@ function save(): void {
       : wallet.get(item.uid);
   }
   wallet.setAll(next);
+
+  const baseText = String(baseBetValue.value).trim();
+  const baseNum = baseText === "" ? BEAN_BASE : Number(baseText);
+  settings.setBaseBet(Number.isFinite(baseNum) ? baseNum : BEAN_BASE);
+
   emit("close");
 }
 </script>

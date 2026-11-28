@@ -1,8 +1,15 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { AppSetting } from "@/game/types";
+import { BEAN_BASE } from "@/game/rooms";
 
 const STORAGE_KEY = "doudizhu-setting-v1";
+
+function normalizeBaseBet(value: unknown): number {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return BEAN_BASE;
+  return Math.max(1, Math.round(num));
+}
 
 function loadSetting(): AppSetting {
   try {
@@ -14,12 +21,19 @@ function loadSetting(): AppSetting {
         animation: parsed.animation !== false,
         counter: parsed.counter !== false,
         shuffle: parsed.shuffle !== false,
+        baseBet: normalizeBaseBet(parsed.baseBet ?? BEAN_BASE),
       };
     }
   } catch {
     // 读取失败时使用默认配置
   }
-  return { sound: true, animation: true, counter: true, shuffle: true };
+  return {
+    sound: true,
+    animation: true,
+    counter: true,
+    shuffle: true,
+    baseBet: BEAN_BASE,
+  };
 }
 
 export const useSettingsStore = defineStore("settings", () => {
@@ -28,6 +42,7 @@ export const useSettingsStore = defineStore("settings", () => {
   const animation = ref(initial.animation);
   const counter = ref(initial.counter);
   const shuffle = ref(initial.shuffle);
+  const baseBet = ref(initial.baseBet);
 
   function persist(): void {
     try {
@@ -38,11 +53,17 @@ export const useSettingsStore = defineStore("settings", () => {
           animation: animation.value,
           counter: counter.value,
           shuffle: shuffle.value,
+          baseBet: baseBet.value,
         }),
       );
     } catch {
       // localStorage 不可用时静默降级
     }
+  }
+
+  function setBaseBet(value: number): void {
+    baseBet.value = normalizeBaseBet(value);
+    persist();
   }
 
   function toggleSound(): void {
@@ -70,6 +91,7 @@ export const useSettingsStore = defineStore("settings", () => {
     animation.value = true;
     counter.value = true;
     shuffle.value = true;
+    baseBet.value = BEAN_BASE;
     persist();
   }
 
@@ -78,6 +100,8 @@ export const useSettingsStore = defineStore("settings", () => {
     animation,
     counter,
     shuffle,
+    baseBet,
+    setBaseBet,
     toggleSound,
     toggleAnimation,
     toggleCounter,

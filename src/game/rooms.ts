@@ -21,8 +21,26 @@ export const ROOMS: Room[] = [
   { id: "master", name: "大师场", multiplier: 500, minBeans: 2500000 },
 ];
 
-export function getRoom(id: string | null | undefined): Room {
-  return ROOMS.find((room) => room.id === id) ?? ROOMS[0];
+const NO_SHUFFLE_MIN_BEANS: Record<string, number> = {
+  novice: 0,
+  standard: 1000000,
+  expert: 10000000,
+  master: 100000000,
+};
+
+export function getRooms(shuffle: boolean): Room[] {
+  if (shuffle) return ROOMS;
+  return ROOMS.map((room) => ({
+    ...room,
+    minBeans: NO_SHUFFLE_MIN_BEANS[room.id] ?? room.minBeans,
+  }));
+}
+
+export function getRoom(
+  id: string | null | undefined,
+  shuffle = true,
+): Room {
+  return getRooms(shuffle).find((room) => room.id === id) ?? getRooms(shuffle)[0];
 }
 
 function compact(value: number): string {
